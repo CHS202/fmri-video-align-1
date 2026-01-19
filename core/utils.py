@@ -11,6 +11,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 import torch.nn.functional as F
 import pandas as pd
 from scipy.stats import rankdata
+import sys
+from .layer_contribution import calculate_layer_contributions
 def local2global_path(opt,test_svm=False):
     if opt.root_path != '':
         opt.video_path = os.path.join(opt.data_root_path, opt.video_path)
@@ -34,35 +36,38 @@ def local2global_path(opt,test_svm=False):
             else:
                 co_train = 'not_co_train'
 
-            if opt.behavior == False:
-                if opt.network_choose == 'shufflenet_v1':
-                    if opt.random_choice == True:
-                        now = 'new_result/final_2181/sig_test/'+opt.dataset_choose+'/'+opt.network_choose+'_1.5x/'+'/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate)+'_'+str(opt.sig_test_run) + '_' + str(opt.video_num)
-                    else:
-                        if opt.data_use == 'mean':
-                            now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_1.5x/' + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run)
+            if opt.get_layer_contribution:
+                opt.result_path = opt.model_pretrained[:-20]
+            else:
+                if opt.behavior == False:
+                    if opt.network_choose == 'shufflenet_v1':
+                        if opt.random_choice == True:
+                            now = 'new_result/final_2181/sig_test/'+opt.dataset_choose+'/'+opt.network_choose+'_1.5x/'+'/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate)+'_'+str(opt.sig_test_run) + '_' + str(opt.video_num)
                         else:
-                            now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_1.5x/' + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + opt.data_use
-                elif opt.network_choose == 'mobilenet_v2':
-                    now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_0.45x/' + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + opt.data_use
+                            if opt.data_use == 'mean':
+                                now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_1.5x/' + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run)
+                            else:
+                                now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_1.5x/' + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + opt.data_use
+                    elif opt.network_choose == 'mobilenet_v2':
+                        now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_0.45x/' + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + opt.data_use
 
-                else:
-                    if opt.random_choice == True:
-                        now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose  + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + str(opt.video_num)
                     else:
-                        if opt.data_use == 'mean':
-                            now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run)
+                        if opt.random_choice == True:
+                            now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose  + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + str(opt.video_num)
                         else:
-                            now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + opt.data_use
-            elif opt.behavior == True:
-                if opt.network_choose == 'shufflenet_v1':
-                    now = 'new_result/final_2181/sig_test/'+opt.dataset_choose+'/'+opt.network_choose+'_1.5x/result_' + opt.dataset_choose + '_split=' + str(
-                    opt.split) + '_lr=' + str(opt.learning_rate)+'_'+str(opt.sig_test_run)+'_behavior_'+opt.behavior_data
-                elif opt.network_choose == 'mobilenet_v2':
-                    now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_0.45x/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_behavior_' + opt.behavior_data
-                else:
-                    now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_behavior_' + opt.behavior_data
-            opt.result_path = os.path.join(opt.result_path, now)
+                            if opt.data_use == 'mean':
+                                now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run)
+                            else:
+                                now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + opt.data_use
+                elif opt.behavior == True:
+                    if opt.network_choose == 'shufflenet_v1':
+                        now = 'new_result/final_2181/sig_test/'+opt.dataset_choose+'/'+opt.network_choose+'_1.5x/result_' + opt.dataset_choose + '_split=' + str(
+                        opt.split) + '_lr=' + str(opt.learning_rate)+'_'+str(opt.sig_test_run)+'_behavior_'+opt.behavior_data
+                    elif opt.network_choose == 'mobilenet_v2':
+                        now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_0.45x/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_behavior_' + opt.behavior_data
+                    else:
+                        now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_behavior_' + opt.behavior_data
+                opt.result_path = os.path.join(opt.result_path, now)
             print('result_path:',opt.result_path)
         else:
             opt.result_path = os.path.join(opt.result_path, opt.expr_name)
@@ -207,6 +212,77 @@ def run_model(opt, inputs, model, criterion=None, i=0, print_attention=False, pe
         outputs = model(visual,test_svm=test_svm)
         y_pred, alpha, beta, gamma, fSCT = outputs
         return fSCT
+    
+def run_model_for_contribution(opt, train_loader,neural_loader, model):
+    print("# ---------------------------------------------------------------------- #")
+    print('Getting layer contributions')
+    model.eval()
+
+    contribution_all = {}
+    mse_all = 0
+    r2_all = 0
+    dataloader_iterator1 = iter(neural_loader)
+    for i, train_data_item in enumerate(train_loader):
+        try:
+            neural_data_item = next(dataloader_iterator1)
+        except StopIteration:
+            dataloader_iterator1 = iter(neural_loader)
+            neural_data_item = next(dataloader_iterator1)
+        neural_visual, RSA_output, neural_batch_size,visual_item = process_neural_data_item(opt, neural_data_item)
+        _, neural_response,  _, _ = neural_data_item
+        voxel_select = neural_response[opt.data_use].cuda()
+        # print("voxel_select.shape:",voxel_select.shape)
+
+        if opt.network_choose != 'vaa':
+            visual_p = model.input_process(neural_visual)
+        if opt.network_choose == 'resnet_18':
+            new_m = torchvision.models._utils.IntermediateLayerGetter(model.resnet, {'0': 'conv1', '4': 'conv5','5':'conv9','6':'conv13','7':'conv17'})
+            out = new_m(visual_p)
+        elif opt.network_choose == 'squeezenet':
+            new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN.features,{'0': 'conv1', '6': 'Fire3', '9': 'Fire5','12': 'Fire7', '14': 'Fire9'})
+            out = new_m(visual_p)
+        elif opt.network_choose == 'shufflenet_v1':
+            new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN,{'conv1': 'conv1', 'layer1': 'layer1', 'layer2':'layer2','layer3': 'layer3'})
+            out = new_m(visual_p)
+        elif opt.network_choose == 'shufflenet_v2':
+            new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN,{'conv1': 'conv1', 'features': 'features', 'conv_last':'conv_last'})
+            out = new_m(visual_p)
+        elif opt.network_choose == 'mobilenet_v1':
+            new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN.features,{'0': '64channels', '1': '128channels', '3': '256channels','5': '512channels', '11': '1024channels','13':'2048channels'})
+            out = new_m(visual_p)
+        elif opt.network_choose == 'mobilenet_v2':
+            new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN.features,{'0': '14channels', '17': '144channels','18': '1280channels'})
+            out = new_m(visual_p)
+
+        # print(out.keys())
+
+        contribution, mse, r2 = calculate_layer_contributions(voxel_select, out, opt)
+        mse_all += mse
+        r2_all += r2
+        # sum contribution to contribution_all and average
+        for k in contribution:
+            if k not in contribution_all.keys():
+                contribution_all[k] = contribution[k]
+            else:
+                contribution_all[k] += contribution[k]
+
+        if i % 10 == 0:
+            print('layer contribution: %d' % i)
+            print("voxel_select.shape:",voxel_select.shape)
+            # print(contribution)
+
+    mse_all = mse_all / len(train_loader)
+    r2_all = r2_all / len(train_loader)
+    # average contribution
+    for k in contribution_all:
+        contribution_all[k] = contribution_all[k] / len(train_loader)
+    np.savetxt(os.path.join(opt.result_path, f'raw_fmri_{opt.roi}_layer_contributions_{opt.data_use}.csv'), 
+               [[name, contrib] for name, contrib in contribution_all.items()], 
+               delimiter=',', fmt='%s', header='layer,contribution')
+    # save mse and r2 in the same txt file
+    np.savetxt(os.path.join(opt.result_path, f'raw_fmri_{opt.roi}_mse_r2_{opt.data_use}.csv'), 
+               [[mse_all, r2_all]], 
+               delimiter=',', fmt='%s', header='mse,r2')
 
 def run_model_iscience(opt, inputs, model, criterion=None, i=0, print_attention=False, period=30, return_attention=False,test_svm=False):
     if not test_svm:
@@ -234,6 +310,7 @@ def run_model_iscience(opt, inputs, model, criterion=None, i=0, print_attention=
 def run_neural_model(opt,inputs, model,print_gamma=False):
     remove = 0
     visual,RSA_target = inputs
+    # print("RSA_target:", RSA_target)
     if opt.network_choose != 'vaa':
         visual_p = model.input_process(visual)
     if opt.network_choose == 'resnet_18':
@@ -449,7 +526,7 @@ def run_neural_model_v2(opt,inputs, model,epoch,print_gamma=False):
         # 1. Reshape to re-introduce the sequence dimension
         #    Shape becomes (batch_size, seq_len, 128) -> (16, 10, 128)
         #    The -1 automatically infers the seq_len (10)
-        visual_embeddings = visual_embeddings.view(batch_size, -1, 288)
+        visual_embeddings = visual_embeddings.view(batch_size, -1, 2304)
 
         # 2. Aggregate the sequence dimension (dim=1) by averaging
         #    Shape becomes (batch_size, 128) -> (16, 128)
