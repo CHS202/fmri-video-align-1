@@ -70,7 +70,11 @@ def parse_opts():
                  help="Local path of result directory"),
             dict(name='--expr_name',
                  type=str,
-                 default='')
+                 default=''),
+            dict(name="--task",
+                 default="design",
+                 type=str,
+                 help="classification tasks e.g. design, space, ..."),
         ],
         'core': [
             dict(name='--batch_size',
@@ -114,7 +118,7 @@ def parse_opts():
                  type=int,
                  help='fps'),
             dict(name='--split',
-                 default=1,
+                 default=2,
                  type=int,
                  help='split'),
             dict(name='--use_model',
@@ -122,9 +126,14 @@ def parse_opts():
                  help='use predicted response'
                  ),
             dict(name='--data_use',
-                 default='sub-02',
+                 default='sub-01',
                #   default='mean',
                  help='data use'
+                 ),
+            dict(name='--roi',
+                 default='EVC',
+               #   default='mean',
+                 help='which roi to calculate layer contribution (e.g. EVC, RSC, PPA, TOS)'
                  ),
             dict(name='--RSA_similarity_print',
                  default=False,
@@ -166,6 +175,10 @@ def parse_opts():
             dict(name='--align_only_last_layer',
                  default=False,
                  help='align_only_last_layer'
+                 ),
+            dict(name='--get_layer_contribution',
+                 default=False,
+                 help='calculate layer contribution'
                  ),
             dict(name='--mixup_pct',
                  default=.0,

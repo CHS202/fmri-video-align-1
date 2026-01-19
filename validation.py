@@ -57,7 +57,10 @@ def val_epoch_class(epoch, data_loader, model, criterion, opt, optimizer):
     elif opt.dataset_choose == 'ek6':
         class_name = ['Anger', 'Disgust', 'Fear', 'Joy', 'Sadness', 'Surprise']
     elif opt.dataset_choose == 'rt':
-        class_name = ['MODN', 'MUJI', 'SCAN', 'WABI']
+        if opt.task == 'design':
+            class_name = ['MODN', 'MUJI', 'SCAN', 'WABI']
+        elif opt.task == 'space':
+            class_name = ['SPACE_05', 'SPACE_06', 'SPACE_07', 'SPACE_08', 'SPACE_09', 'SPACE_10', 'SPACE_11', 'SPACE_12']
     end_time = time.time()
     test_label = []
     output_all = []

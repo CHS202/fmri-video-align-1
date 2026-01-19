@@ -159,7 +159,10 @@ def co_train_epoch(epoch, train_loader,neural_loader, model, criterion, optimize
         # gamma,similarity_loss = run_neural_model(opt,[neural_visual, RSA_output],model,print_gamma)
         acc = calculate_accuracy(output, target)
         # total_loss = similarity_loss # 251007 only_sim
-        total_loss = ce_loss + opt.alpha * similarity_loss
+        if similarity_loss is None:
+            total_loss = ce_loss
+        else:
+            total_loss = ce_loss + opt.alpha * similarity_loss
         accuracies.update(acc, batch_size)
 
         # Backward and optimize
@@ -171,31 +174,31 @@ def co_train_epoch(epoch, train_loader,neural_loader, model, criterion, optimize
         end_time = time.time()
 
         total_losses_sum.append(total_loss.item())
-        similarity_losses_sum.append(similarity_loss.item())
+        if similarity_loss is not None: similarity_losses_sum.append(similarity_loss.item())
         ce_losses_sum.append(ce_loss.item())
         total_losses_avg = torch.mean(torch.tensor(total_losses_sum))
         similarity_losses_avg = torch.mean(torch.tensor(similarity_losses_sum))
         ce_losses_avg = torch.mean(torch.tensor(ce_losses_sum))
 
-        if opt.debug:
-            if epoch < int(opt.mixup_pct * opt.n_epochs):
-                print('Epoch: [{0}][{1}/{2}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'Total_Loss {total_loss:.4f} ({total_loss_avg:.4f})\t'
-                  'MIXCO_Loss {similarity_loss:.4f} ({similarity_loss_avg:.4f})\t'
-                  'CE_Loss {ce_loss:.4f} ({ce_loss_avg:.4f})\t'
-                  'Acc {acc.val:.3f} ({acc.avg:.3f})'.format(
-                epoch, i + 1, len(train_loader), batch_time=batch_time, data_time=data_time, total_loss=total_loss, total_loss_avg=total_losses_avg,similarity_loss=similarity_loss,similarity_loss_avg=similarity_losses_avg,ce_loss=ce_loss,ce_loss_avg=ce_losses_avg,acc=accuracies))
-            else:
-                print('Epoch: [{0}][{1}/{2}]\t'
-                    'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                    'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                    'Total_Loss {total_loss:.4f} ({total_loss_avg:.4f})\t'
-                    'SIM_Loss {similarity_loss:.4f} ({similarity_loss_avg:.4f})\t'
-                    'CE_Loss {ce_loss:.4f} ({ce_loss_avg:.4f})\t'
-                    'Acc {acc.val:.3f} ({acc.avg:.3f})'.format(
-                    epoch, i + 1, len(train_loader), batch_time=batch_time, data_time=data_time, total_loss=total_loss, total_loss_avg=total_losses_avg,similarity_loss=similarity_loss,similarity_loss_avg=similarity_losses_avg,ce_loss=ce_loss,ce_loss_avg=ce_losses_avg,acc=accuracies))
+        # if opt.debug:
+        #     if epoch < int(opt.mixup_pct * opt.n_epochs):
+        #         print('Epoch: [{0}][{1}/{2}]\t'
+        #           'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+        #           'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
+        #           'Total_Loss {total_loss:.4f} ({total_loss_avg:.4f})\t'
+        #           'MIXCO_Loss {similarity_loss:.4f} ({similarity_loss_avg:.4f})\t'
+        #           'CE_Loss {ce_loss:.4f} ({ce_loss_avg:.4f})\t'
+        #           'Acc {acc.val:.3f} ({acc.avg:.3f})'.format(
+        #         epoch, i + 1, len(train_loader), batch_time=batch_time, data_time=data_time, total_loss=total_loss, total_loss_avg=total_losses_avg,similarity_loss=similarity_loss,similarity_loss_avg=similarity_losses_avg,ce_loss=ce_loss,ce_loss_avg=ce_losses_avg,acc=accuracies))
+        #     else:
+        #         print('Epoch: [{0}][{1}/{2}]\t'
+        #             'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+        #             'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
+        #             'Total_Loss {total_loss:.4f} ({total_loss_avg:.4f})\t'
+        #             'SIM_Loss {similarity_loss:.4f} ({similarity_loss_avg:.4f})\t'
+        #             'CE_Loss {ce_loss:.4f} ({ce_loss_avg:.4f})\t'
+        #             'Acc {acc.val:.3f} ({acc.avg:.3f})'.format(
+        #             epoch, i + 1, len(train_loader), batch_time=batch_time, data_time=data_time, total_loss=total_loss, total_loss_avg=total_losses_avg,similarity_loss=similarity_loss,similarity_loss_avg=similarity_losses_avg,ce_loss=ce_loss,ce_loss_avg=ce_losses_avg,acc=accuracies))
         
         torch.cuda.empty_cache()
 
