@@ -131,10 +131,14 @@ def generate_4_splits(csv_path, train_output_path, test_output_path):
     # --- IMPORTANT ---
     # You MUST customize this list based on your specific video names.
     all_test_keys = [
-        ["SPACE_05", "SPACE_09", "SPACE_01"],  # Test keys for Split 1
-        ["SPACE_06", "SPACE_10", "SPACE_02"],  # Test keys for Split 2
-        ["SPACE_07", "SPACE_11", "SPACE_03"],  # Test keys for Split 3
-        ["SPACE_08", "SPACE_12", "SPACE_04"]   # Test keys for Split 4
+        # ["SPACE_05", "SPACE_09", "SPACE_01"],  # Test keys for Split 1
+        # ["SPACE_06", "SPACE_10", "SPACE_02"],  # Test keys for Split 2
+        # ["SPACE_07", "SPACE_11", "SPACE_03"],  # Test keys for Split 3
+        # ["SPACE_08", "SPACE_12", "SPACE_04"]   # Test keys for Split 4
+        ["MODN"],  # Test keys for Split 1
+        ["MUJI"],  # Test keys for Split 2
+        ["SCAN"],  # Test keys for Split 3
+        ["WABI"]   # Test keys for Split 4
     ]
 
     print(f"\n--- Generating 4 Train/Test Splits from '{csv_path}' ---")
@@ -174,12 +178,12 @@ def generate_4_splits(csv_path, train_output_path, test_output_path):
 
             # --- MODIFICATION START ---
             # 3. Save the .mat file for the CURRENT split inside the loop
-            # mat_output_path = f'video_order_rt_{i+1}.mat'
-            # with h5py.File(mat_output_path, 'w') as hf:
-            #     # Since the split is identified by the filename,
-            #     # we can use a consistent dataset name inside.
-            #     hf.create_dataset('video_order', data=train_ids_np)
-            # print(f"✅ Saved training order to '{mat_output_path}'")
+            mat_output_path = f'video_order_rt_space_{i+1}.mat'
+            with h5py.File(mat_output_path, 'w') as hf:
+                # Since the split is identified by the filename,
+                # we can use a consistent dataset name inside.
+                hf.create_dataset('video_order', data=train_ids_np)
+            print(f"✅ Saved training order to '{mat_output_path}'")
             # --- MODIFICATION END ---
 
 
@@ -207,14 +211,14 @@ def generate_4_splits(csv_path, train_output_path, test_output_path):
 if __name__ == '__main__':
     # --- Configuration ---
     ROOT_VIDEO_DIRECTORY = "RT--raw"
-    SUBDIRECTORIES_TO_SCAN = ["MODN", "MUJI", "WABI", "SCAN"]
-    OUTPUT_CSV_FILE = "video_id_rt_ses123.csv"
-    TRAIN_IDX_FILE = "train_idx_rt_ses123.npy"
-    TEST_IDX_FILE = "test_idx_rt_ses123.npy"
+    SUBDIRECTORIES_TO_SCAN = ["MODN", "MUJI", "SCAN", "WABI"]
+    OUTPUT_CSV_FILE = "video_id_rt.csv"
+    TRAIN_IDX_FILE = "train_idx_rt_space.npy"
+    TEST_IDX_FILE = "test_idx_rt_space.npy"
     # MAT_ORDER_FILE = "video_order_rt.mat"
 
     # 2. Run the main function to generate the CSV.
-    generate_video_csv(ROOT_VIDEO_DIRECTORY, SUBDIRECTORIES_TO_SCAN, OUTPUT_CSV_FILE)
+    # generate_video_csv(ROOT_VIDEO_DIRECTORY, SUBDIRECTORIES_TO_SCAN, OUTPUT_CSV_FILE)
 
     # 3. Generate the train/test split .npy files from the CSV.
     # generate_train_test_split(OUTPUT_CSV_FILE, TRAIN_IDX_FILE, TEST_IDX_FILE, MAT_ORDER_FILE)
@@ -238,12 +242,12 @@ if __name__ == '__main__':
         print("Could not read the .npy output files.")
 
     
-    # for i in range(1,5):
-    #     print(f"\n--- Contents of train_order_rt_{i}.mat (read using h5py) ---")
-    #     mat_output_path = f'video_order_rt_{i}.mat'
-    #     try:
-    #         with h5py.File(mat_output_path, 'r') as f:
-    #             video_order = np.array(f['video_order'])
-    #             print(f"Video Order (.mat): {video_order}")
-    #     except FileNotFoundError:
-    #         print(f"Could not read the '{mat_output_path}' output file.")
+    for i in range(1,5):
+        print(f"\n--- Contents of train_order_rt_space_{i}.mat (read using h5py) ---")
+        mat_output_path = f'video_order_rt_space_{i}.mat'
+        try:
+            with h5py.File(mat_output_path, 'r') as f:
+                video_order = np.array(f['video_order'])
+                print(f"Video Order (.mat): {video_order}")
+        except FileNotFoundError:
+            print(f"Could not read the '{mat_output_path}' output file.")
