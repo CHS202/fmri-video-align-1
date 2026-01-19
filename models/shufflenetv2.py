@@ -238,7 +238,7 @@ def pretrained_shufflenet_v2_1(snippet_duration: int,
     in_features = model.classifier[1].in_features
     
     # 2. Define the new projection head output size.
-    projection_dim = 288
+    projection_dim = 2304
     
     # 3. Replace the original fc layer with a new nn.Sequential module.
     #    This new module contains:

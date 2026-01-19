@@ -53,8 +53,8 @@ class VisualStream(nn.Module):
         self.fc = nn.Linear(self.hp['k'], self.n_classes)
         # add a projection layer to the last fc layer 
         # self.fc = nn.Sequential(
-        #     nn.Linear(self.hp['k'], 288), # Projection layer
-        #     nn.Linear(288, self.n_classes)   # Final classification layer
+        #     nn.Linear(self.hp['k'], 2304), # Projection layer 128, 288 or 2304
+        #     nn.Linear(2304, self.n_classes)   # Final classification layer
         # )
 
     def _init_params(self):

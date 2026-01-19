@@ -202,7 +202,7 @@ def pretrained_squeezenet_1(snippet_duration: int,
     
     # 2. The input to the classifier has 512 channels.
     in_channels = 512
-    projection_dim = 288
+    projection_dim = 2304
     
     # 3. Rebuild the classifier with the new projection block.
     model.classifier = nn.Sequential(
