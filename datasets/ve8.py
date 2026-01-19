@@ -269,8 +269,12 @@ def get_video_class(opt,subset,annotation_path):
         split_train = np.load('train_idx_ek6.npy')
         split_test = np.load('test_idx_ek6.npy')
     elif opt.dataset_choose == 'rt':
-        split_train = np.load('train_idx_rt.npy')
-        split_test = np.load('test_idx_rt.npy')
+        if opt.task == 'design':
+            split_train = np.load('train_idx_rt.npy')
+            split_test = np.load('test_idx_rt.npy')
+        elif opt.task == 'space':
+            split_train = np.load('train_idx_rt_space.npy')
+            split_test = np.load('test_idx_rt_space.npy')
         # reshape to (1, N)
         # split_train = np.expand_dims(split_train, axis=0)
         # split_test = np.expand_dims(split_test, axis=0)
@@ -283,8 +287,12 @@ def get_video_class(opt,subset,annotation_path):
     annotations = []
     df = pd.read_csv(annotation_path)
     for i in list(index):
-        video_names.append(df.loc[i-1,'Video Name and Directory'])
-        annotations.append({'label':df.loc[i-1,'Video Name and Directory'].split('/')[0]})
+        if opt.task == 'design':
+            video_names.append(df.loc[i-1,'Video Name and Directory']) # MODN/SPACE_05_MODN_clip_000
+            annotations.append({'label':df.loc[i-1,'Video Name and Directory'].split('/')[0]})  # MODN
+        elif opt.task == 'space':
+            video_names.append(df.loc[i-1,'Video Name and Directory']) # MODN/SPACE_05_MODN_clip_000
+            annotations.append({'label':df.loc[i-1,'Video Name and Directory'].split('/')[1][:8]}) # SPACE_05
     return video_names,annotations
 
 
@@ -297,7 +305,10 @@ def make_dataset(opt,video_root_path, annotation_path,  subset, fps=30,dataset_c
     elif dataset_choose == 'mafw':
         class_to_idx = {'Anger':0,'Disgust':1,'Fear':2,'Happiness':3,'Neutral':4,'Sadness':5,'Surprise':6,'Contempt':7,'Anxiety':8,'Helplessness':9,'Disappointment':10}
     elif dataset_choose == 'rt':
-        class_to_idx = {'MODN': 0, 'MUJI': 1, 'SCAN': 2, 'WABI': 3}
+        if opt.task == 'design':
+            class_to_idx = {'MODN': 0, 'MUJI': 1, 'SCAN': 2, 'WABI': 3}
+        elif opt.task == 'space':
+            class_to_idx = {'SPACE_05': 0, 'SPACE_06': 1, 'SPACE_07': 2, 'SPACE_08': 3, 'SPACE_09': 4, 'SPACE_10': 5, 'SPACE_11': 6, 'SPACE_12': 7}
     idx_to_class = {}
     for name, label in class_to_idx.items():
         idx_to_class[label] = name
@@ -405,7 +416,10 @@ def make_neural_dataset(opt,video_root_path, neural_response,fps=30):
     #     video_ids = random.sample(video_ids,opt.video_num)
     # print(video_ids)
     print(len(video_ids))
-    class_to_idx = {'MODN': 0, 'MUJI': 1, 'SCAN': 2, 'WABI': 3}
+    if opt.task == 'design':
+        class_to_idx = {'MODN': 0, 'MUJI': 1, 'SCAN': 2, 'WABI': 3}
+    elif opt.task == 'space':
+        class_to_idx = {'SPACE_05': 0, 'SPACE_06': 1, 'SPACE_07': 2, 'SPACE_08': 3, 'SPACE_09': 4, 'SPACE_10': 5, 'SPACE_11': 6, 'SPACE_12': 7}
 
     import csv
 
@@ -449,7 +463,10 @@ def make_neural_dataset(opt,video_root_path, neural_response,fps=30):
             'n_frames': n_frames,
             'video_id': video_id_to_name[i].split('/')[1],
         }
-        sample['label'] = class_to_idx[df.loc[i-1,'Video Name and Directory'].split('/')[0]]
+        if opt.task == 'design':
+            sample['label'] = class_to_idx[df.loc[i-1,'Video Name and Directory'].split('/')[0]]
+        elif opt.task == 'space':
+            sample['label'] = class_to_idx[df.loc[i-1,'Video Name and Directory'].split('/')[1][:8]]
 
 
         ORIGINAL_FPS = 30
@@ -460,7 +477,6 @@ def make_neural_dataset(opt,video_root_path, neural_response,fps=30):
         if opt.data_use == 'mean':
             sample['neural']={'sub-01':neural_response[0][neural_index].squeeze(0),'sub-02':neural_response[1][neural_index].squeeze(0),'sub-03':neural_response[2][neural_index].squeeze(0),'sub-04':neural_response[3][neural_index].squeeze(0),'sub-05':neural_response[4][neural_index].squeeze(0)}
         else:
-            # print("neural_response[0][neural_index].shape", neural_response[0][neural_index].shape)
             sample['neural'] = {opt.data_use:neural_response[0][neural_index]}
         dataset.append(sample)
     return dataset
