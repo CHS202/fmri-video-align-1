@@ -20,9 +20,9 @@ def generate_voxel_selection(config):
     Main function to generate the voxel selection npy file.
     """
     # --- 1. Load video order and create ID-to-Name mapping ---
-    print("Loading video order and ID-to-name mapping...")
+    print(f"Loading video order from {config['mat_order_file']} and ID-to-name mapping...")
     try:
-        video_order = np.array(h5py.File('video_order_rt.mat')['video_order'])
+        video_order = np.array(h5py.File(config['mat_order_file'])['video_order'])
     except FileNotFoundError:
         print(f"Error: Input file not found: '{config['mat_order_file']}'")
         return
@@ -107,15 +107,15 @@ if __name__ == '__main__':
     # NOTE: For the dummy setup, we create 'fmri-clip' locally.
     # For your real data, change this path to the parent directory, e.g., 'D:\IDWB\video-annotation\data'
     FMRI_DATA_ROOT = "/mnt/d/IDWB/video-annotation/data/fmri-clip-gd" 
-    SUBJECT_ID = "01"
+    SUBJECT_ID = "02"
     SPLIT = 1
-    for SPLIT in [2, 3, 4]:
+    for SPLIT in [1, 2, 3, 4]:
         config = {
             "csv_file": "../BrainGuided/video_id_rt.csv",
             "mat_order_file": f"video_order_rt_{SPLIT}.mat",
             "fmri_subject_dir": os.path.join(FMRI_DATA_ROOT, f"sub-{SUBJECT_ID}"),
             "subject_base_name": f"sub-{SUBJECT_ID}",
-            "rois": ['EVC', 'PPA', 'RSC', 'TOS'],
+            "rois": ['ALL','EVC', 'PPA', 'RSC', 'TOS'],
             # "rois": ['ALL'],
             "output_dir": f"emotion_encoding_results/sub-{SUBJECT_ID}",
             # "output_file_name": f"voxel_select_remain_time_{SPLIT}.npy"
