@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.linear_model import RidgeCV
 from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import Ridge
 
 def calculate_layer_contributions(all_labels, layers_output, opt):
     """
@@ -26,7 +27,7 @@ def calculate_layer_contributions(all_labels, layers_output, opt):
             feats_flat = feats.reshape(feats.shape[0], -1)
         else:
             feats_flat = feats
-
+        # print(f"Layer {key} - Max value: {np.max(feats_flat)}, Min value: {np.min(feats_flat)}")
         # PCA: keep 99% variance
         pca = PCA(n_components=0.99)
         feats_pca = pca.fit_transform(feats_flat)
@@ -59,15 +60,17 @@ def calculate_layer_contributions(all_labels, layers_output, opt):
     # print(f"Fitting Ridge Regression on combined features (Shape: {X_combined.shape})...")
     # alphas can be adjusted based on your needs
     y = y.detach().cpu().numpy()
-    ridge = RidgeCV(alphas=np.logspace(-3, 3, 20))
+    # ridge = RidgeCV(alphas=np.logspace(-5, 10, 20))
+    ridge = Ridge(alpha=1.0)
     ridge.fit(X_combined, y)
+    # print(f"Chosen alpha: {ridge.alpha}")
     
     # ridge.coef_ has shape (N_voxels, Total_PCA_Components)
     all_weights = ridge.coef_
 
     # --- Calculate TOTAL prediction (all layers combined) ---
     # pred_all shape: (N_samples, N_voxels)
-    pred_all = X_combined @ all_weights.T 
+    pred_all = X_combined @ all_weights.T + ridge.intercept_
     # calculate prediction mse
     mse = np.mean((pred_all - y) ** 2, axis=0)
     mse = np.mean(mse, axis=0)
@@ -118,4 +121,148 @@ def calculate_layer_contributions(all_labels, layers_output, opt):
         contributions[name] = np.mean(layer_v_contribs)
         # print(f"Layer {name} contribution: {contributions[name]:.4f}")
 
-    return contributions, mse, r2
+    return pred_all, contributions, mse, r2
+
+def calculate_layer_contributions_v2(all_labels, layers_output, opt):
+    """
+    per‑layer normalization, preserving within‑layer variances
+    """
+    
+    reduced_features_list = []
+    layer_metadata = [] # To keep track of which columns belong to which layer
+    current_col_idx = 0
+
+    # --- PCA per layer and prepare for concatenation ---
+    # print("Performing PCA and preparing features...")
+    for key, feats in layers_output.items():
+        feats = feats.detach().cpu().numpy()
+        if len(feats.shape) > 2:
+            feats_flat = feats.reshape(feats.shape[0], -1)
+        else:
+            feats_flat = feats
+
+        # PCA: keep 99% variance
+        pca = PCA(n_components=0.99)
+        feats_pca = pca.fit_transform(feats_flat)  # shape: N_samples x N_components
+
+        # NEW: optional per-layer scaling (single scalar per layer)
+        # This keeps the relative variance between PCA components within the layer.
+        layer_std = feats_pca.std()  # global std for this layer
+        if layer_std > 1e-8:
+            feats_layer_scaled = feats_pca / layer_std
+        else:
+            feats_layer_scaled = feats_pca
+
+        n_components = feats_layer_scaled.shape[1]
+        reduced_features_list.append(feats_layer_scaled)
+        layer_metadata.append({
+            "name": key,
+            "start": current_col_idx,
+            "end": current_col_idx + n_components
+        })
+        current_col_idx += n_components
+
+    # Concatenate all features into one matrix (N_samples x Total_PCA_Components)
+    X_combined = np.hstack(reduced_features_list)
+    y = all_labels # Shape: (N_samples, N_voxels)
+    # print(f"Combined features shape: {X_combined.shape}")
+    # print(f"Labels shape: {y.shape}")
+    
+    if y.ndim == 1:
+        y = y[:, np.newaxis]
+
+    # --- Run Ridge Regression ---
+    # print(f"Fitting Ridge Regression on combined features (Shape: {X_combined.shape})...")
+    # alphas can be adjusted based on your needs
+    y = y.detach().cpu().numpy()
+    # ridge = RidgeCV(alphas=np.logspace(-5, 10, 20))
+    ridge = Ridge(alpha=1.0)
+    ridge.fit(X_combined, y)
+    # print(f"Chosen alpha: {ridge.alpha}")
+    
+    # ridge.coef_ has shape (N_voxels, Total_PCA_Components)
+    all_weights = ridge.coef_
+
+    # --- Calculate TOTAL prediction (all layers combined) ---
+    # pred_all shape: (N_samples, N_voxels)
+    pred_all = X_combined @ all_weights.T + ridge.intercept_
+    # calculate prediction mse
+    mse = np.mean((pred_all - y) ** 2, axis=0)
+    mse = np.mean(mse, axis=0)
+    # r-square
+    r2 = 1 - mse / np.var(y, axis=0)
+    r2 = np.mean(r2, axis=0)
+
+    # --- Calculate Layer Contributions based on reference formula ---
+    contributions = {}
+    
+    for meta in layer_metadata:
+        name = meta['name']
+        start, end = meta['start'], meta['end']
+        
+        # Extract specific layer features and weights
+        phi_l = X_combined[:, start:end] 
+        W_l = all_weights[:, start:end]  
+        
+        # Calculate layer-specific prediction (val_pred_lw)
+        pred_l = phi_l @ W_l.T 
+        
+        layer_v_contribs = []
+        
+        for v in range(y.shape[1]):
+            # Get data for this specific voxel
+            y_v = y[:, v]
+            p_full_v = pred_all[:, v]
+            p_layer_v = pred_l[:, v]
+            
+            # 1. Calculate covariance of Layer Prediction with Y (Numerator)
+            cov_layer_y = np.cov(p_layer_v, y_v, ddof=0)[0, 1]
+            
+            # 2. Calculate variance of Full Prediction and Y (Denominator)
+            # This matches: np.sqrt(full_c[0,0] * full_c[1,1]) from your snippet
+            var_full = np.var(p_full_v, ddof=0)
+            var_y = np.var(y_v, ddof=0)
+            
+            # 3. Apply the formula: cov(pred_l, y) / sqrt(var(pred_all) * var(y))
+            denominator = np.sqrt(var_full * var_y)
+            
+            if denominator > 1e-10:
+                C = cov_layer_y / denominator
+            else:
+                C = 0.0
+            
+            layer_v_contribs.append(C)
+            
+        contributions[name] = np.mean(layer_v_contribs)
+        # print(f"Layer {name} contribution: {contributions[name]:.4f}")
+
+    return pred_all, contributions, mse, r2
+import sys
+def calculate_layer_correlation(neural_visual, RSA_target, layers_output, opt):
+    """
+    per‑layer correlation with target
+    """
+    correlations = {}
+    for k, v in layers_output.items():
+        # get rdm of feats
+        v = v.view(neural_visual.size(1),neural_visual.size(0),-1).contiguous()
+        v = torch.mean(v,dim=0)
+        v = v-torch.mean(v,dim=0)
+
+        v1 = v.detach()
+        v2 = v1.cuda(0)
+        del v
+        del v1
+        torch.cuda.empty_cache()
+        rdm = torch.nn.functional.cosine_similarity(v2.unsqueeze(1), v2.unsqueeze(0), dim=-1)
+        # print("rdm shape",rdm.shape)
+        # print("target shape",RSA_target.shape)
+        # sys.exit(0)
+        # get correlation between rdm and target upper triangular
+        rdm = rdm.cpu().detach().numpy()
+        rdm = rdm[np.triu_indices_from(rdm)]
+        target = RSA_target.cpu().detach().numpy()
+        target = target[np.triu_indices_from(target)]
+        correlations[k] = np.corrcoef(rdm, target)[0,1]
+
+    return correlations 

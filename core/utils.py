@@ -12,7 +12,8 @@ import torch.nn.functional as F
 import pandas as pd
 from scipy.stats import rankdata
 import sys
-from .layer_contribution import calculate_layer_contributions
+from collections import OrderedDict
+from .layer_contribution import calculate_layer_contributions, calculate_layer_contributions_v2, calculate_layer_correlation
 def local2global_path(opt,test_svm=False):
     if opt.root_path != '':
         opt.video_path = os.path.join(opt.data_root_path, opt.video_path)
@@ -42,31 +43,31 @@ def local2global_path(opt,test_svm=False):
                 if opt.behavior == False:
                     if opt.network_choose == 'shufflenet_v1':
                         if opt.random_choice == True:
-                            now = 'new_result/final_2181/sig_test/'+opt.dataset_choose+'/'+opt.network_choose+'_1.5x/'+'/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate)+'_'+str(opt.sig_test_run) + '_' + str(opt.video_num)
+                            now = f'new_result/final_2181/sig_test/'+opt.dataset_choose+'/'+opt.network_choose+'_1.5x/'+'/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate)+'_'+str(opt.sig_test_run) + '_' + str(opt.video_num)
                         else:
                             if opt.data_use == 'mean':
-                                now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_1.5x/' + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run)
+                                now = f'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_1.5x/' + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run)
                             else:
-                                now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_1.5x/' + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + opt.data_use
+                                now = f'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_1.5x/' + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + opt.data_use
                     elif opt.network_choose == 'mobilenet_v2':
-                        now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_0.45x/' + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + opt.data_use
+                        now = f'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_0.45x/' + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + opt.data_use
 
                     else:
                         if opt.random_choice == True:
-                            now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose  + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + str(opt.video_num)
+                            now = f'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose  + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + str(opt.video_num)
                         else:
                             if opt.data_use == 'mean':
-                                now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run)
+                                now = f'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run)
                             else:
-                                now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + opt.data_use
+                                now = f'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_' + co_train + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_' + opt.data_use
                 elif opt.behavior == True:
                     if opt.network_choose == 'shufflenet_v1':
-                        now = 'new_result/final_2181/sig_test/'+opt.dataset_choose+'/'+opt.network_choose+'_1.5x/result_' + opt.dataset_choose + '_split=' + str(
+                        now = f'new_result/final_2181/sig_test/'+opt.dataset_choose+'/'+opt.network_choose+'_1.5x/result_' + opt.dataset_choose + '_split=' + str(
                         opt.split) + '_lr=' + str(opt.learning_rate)+'_'+str(opt.sig_test_run)+'_behavior_'+opt.behavior_data
                     elif opt.network_choose == 'mobilenet_v2':
-                        now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_0.45x/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_behavior_' + opt.behavior_data
+                        now = f'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '_0.45x/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_behavior_' + opt.behavior_data
                     else:
-                        now = 'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_behavior_' + opt.behavior_data
+                        now = f'new_result/final_2181/sig_test/' + opt.dataset_choose + '/' + opt.network_choose + '/result_' + opt.dataset_choose + '_split=' + str(opt.split) + '_lr=' + str(opt.learning_rate) + '_' + str(opt.sig_test_run) + '_behavior_' + opt.behavior_data
                 opt.result_path = os.path.join(opt.result_path, now)
             print('result_path:',opt.result_path)
         else:
@@ -213,7 +214,7 @@ def run_model(opt, inputs, model, criterion=None, i=0, print_attention=False, pe
         y_pred, alpha, beta, gamma, fSCT = outputs
         return fSCT
     
-def run_model_for_contribution(opt, train_loader,neural_loader, model):
+def run_model_get_contribution(opt, train_loader,neural_loader, model):
     print("# ---------------------------------------------------------------------- #")
     print('Getting layer contributions')
     model.eval()
@@ -221,7 +222,9 @@ def run_model_for_contribution(opt, train_loader,neural_loader, model):
     contribution_all = {}
     mse_all = 0
     r2_all = 0
+    corr_all = {}
     dataloader_iterator1 = iter(neural_loader)
+    # print("length of train_loader:",len(train_loader))
     for i, train_data_item in enumerate(train_loader):
         try:
             neural_data_item = next(dataloader_iterator1)
@@ -245,44 +248,125 @@ def run_model_for_contribution(opt, train_loader,neural_loader, model):
             new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN,{'conv1': 'conv1', 'layer1': 'layer1', 'layer2':'layer2','layer3': 'layer3'})
             out = new_m(visual_p)
         elif opt.network_choose == 'shufflenet_v2':
-            new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN,{'conv1': 'conv1', 'features': 'features', 'conv_last':'conv_last'})
+            new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN,{'conv1': 'conv1', 'conv_last':'conv_last'})
+            new_m_features = torchvision.models._utils.IntermediateLayerGetter(model.CNN.features,{'3': 'features3', '11': 'features11', '15': 'features15'})
+            # new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN,{'conv1': 'conv1', 'features': 'features', 'conv_last':'conv_last'})
             out = new_m(visual_p)
+            x = model.CNN.conv1(visual_p) 
+            # Pass through maxpool
+            x = model.CNN.maxpool(x)
+            out_features = new_m_features(x)
+            out.update(out_features)
+            # order the key as 'conv1', 'features3', 'features11', 'features15', 'conv_last'
+            desired_order = ['conv1', 'features3', 'features11', 'features15', 'conv_last']
+            # Rebuild the dictionary in the new order
+            out = OrderedDict((k, out[k]) for k in desired_order)
+            # print("shufflenet_v2's out.keys():",out.keys())
         elif opt.network_choose == 'mobilenet_v1':
             new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN.features,{'0': '64channels', '1': '128channels', '3': '256channels','5': '512channels', '11': '1024channels','13':'2048channels'})
             out = new_m(visual_p)
         elif opt.network_choose == 'mobilenet_v2':
-            new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN.features,{'0': '14channels', '17': '144channels','18': '1280channels'})
+            new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN.features,{'0': '14channels', '1': '7channels', '2': '10channels', '4': '14channels', '7': '28channels', '11': '43channels', '14': '72channels', '17': '144channels','18': '1280channels'})
+            # new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN.features,{'0': '14channels', '17': '144channels','18': '1280channels'})
             out = new_m(visual_p)
 
         # print(out.keys())
+        if opt.contribution_method == 'ridge':
+            # output, contribution, mse, r2 = calculate_layer_contributions(voxel_select, out, opt)
+            output, contribution, mse, r2 = calculate_layer_contributions_v2(voxel_select, out, opt)
+            mse_all += mse
+            r2_all += r2
+            # sum contribution to contribution_all and average
+            for k in contribution:
+                if k not in contribution_all.keys():
+                    contribution_all[k] = contribution[k]
+                else:
+                    contribution_all[k] += contribution[k]
 
-        contribution, mse, r2 = calculate_layer_contributions(voxel_select, out, opt)
-        mse_all += mse
-        r2_all += r2
-        # sum contribution to contribution_all and average
-        for k in contribution:
-            if k not in contribution_all.keys():
-                contribution_all[k] = contribution[k]
-            else:
-                contribution_all[k] += contribution[k]
-
-        if i % 10 == 0:
-            print('layer contribution: %d' % i)
-            print("voxel_select.shape:",voxel_select.shape)
+            # if i % 10 == 0:
+            #     # print('layer contribution: %d' % i)
+            #     # print("voxel_select.shape:",voxel_select.shape)
+            #     plot_output(output, voxel_select, i, opt)
             # print(contribution)
+        elif opt.contribution_method == 'rdm_corr':
+            corr = calculate_layer_correlation(neural_visual, RSA_output, out, opt)
+            for k in corr:
+                if k not in corr_all.keys():
+                    corr_all[k] = corr[k]
+                else:
+                    corr_all[k] += corr[k]
+    if opt.contribution_method == 'ridge':
+        mse_all = mse_all / len(train_loader)
+        r2_all = r2_all / len(train_loader)
+        # average contribution
+        for k in contribution_all:
+            contribution_all[k] = contribution_all[k] / len(train_loader) 
+        # np.savetxt(os.path.join(opt.result_path, f'raw_fmri_{opt.roi}_layer_contributions_{opt.data_use}_v2.csv'), 
+        np.savetxt(os.path.join(opt.result_path, f'raw_fmri_{opt.roi}_layer_contributions_{opt.data_use}_v2.csv'),
+                [[name, contrib] for name, contrib in contribution_all.items()], 
+                delimiter=',', fmt='%s', header='layer,contribution')
+        # save mse and r2 in the same txt file 
+        # np.savetxt(os.path.join(opt.result_path, f'raw_fmri_{opt.roi}_mse_r2_{opt.data_use}_v2.csv'), 
+        np.savetxt(os.path.join(opt.result_path, f'raw_fmri_{opt.roi}_mse_r2_{opt.data_use}_v2.csv'),
+                [[mse_all, r2_all]], 
+                delimiter=',', fmt='%s', header='mse,r2')
+    elif opt.contribution_method == 'rdm_corr':
+        for k in corr_all:
+            corr_all[k] = corr_all[k] / len(train_loader)
+        np.savetxt(os.path.join(opt.result_path, f'raw_fmri_{opt.roi}_layer_correlations_{opt.data_use}.csv'), 
+                [[name, corr] for name, corr in corr_all.items()], 
+                delimiter=',', fmt='%s', header='layer,correlation')
+    
+def run_model_contribution(opt, inputs, model):
+    neural_visual, voxel_select = inputs
 
-    mse_all = mse_all / len(train_loader)
-    r2_all = r2_all / len(train_loader)
-    # average contribution
-    for k in contribution_all:
-        contribution_all[k] = contribution_all[k] / len(train_loader)
-    np.savetxt(os.path.join(opt.result_path, f'raw_fmri_{opt.roi}_layer_contributions_{opt.data_use}.csv'), 
-               [[name, contrib] for name, contrib in contribution_all.items()], 
-               delimiter=',', fmt='%s', header='layer,contribution')
-    # save mse and r2 in the same txt file
-    np.savetxt(os.path.join(opt.result_path, f'raw_fmri_{opt.roi}_mse_r2_{opt.data_use}.csv'), 
-               [[mse_all, r2_all]], 
-               delimiter=',', fmt='%s', header='mse,r2')
+    contribution_all = {}
+    mse_all = 0
+
+    if opt.network_choose != 'vaa':
+        visual_p = model.input_process(neural_visual)
+    if opt.network_choose == 'resnet_18':
+        new_m = torchvision.models._utils.IntermediateLayerGetter(model.resnet, {'0': 'conv1', '4': 'conv5','5':'conv9','6':'conv13','7':'conv17'})
+        out = new_m(visual_p)
+    elif opt.network_choose == 'squeezenet':
+        new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN.features,{'0': 'conv1', '6': 'Fire3', '9': 'Fire5','12': 'Fire7', '14': 'Fire9'})
+        out = new_m(visual_p)
+    elif opt.network_choose == 'shufflenet_v1':
+        new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN,{'conv1': 'conv1', 'layer1': 'layer1', 'layer2':'layer2','layer3': 'layer3'})
+        out = new_m(visual_p)
+    elif opt.network_choose == 'shufflenet_v2':
+        new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN,{'conv1': 'conv1', 'features': 'features', 'conv_last':'conv_last'})
+        out = new_m(visual_p)
+    elif opt.network_choose == 'mobilenet_v1':
+        new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN.features,{'0': '64channels', '1': '128channels', '3': '256channels','5': '512channels', '11': '1024channels','13':'2048channels'})
+        out = new_m(visual_p)
+    elif opt.network_choose == 'mobilenet_v2':
+        new_m = torchvision.models._utils.IntermediateLayerGetter(model.CNN.features,{'0': '14channels', '17': '144channels','18': '1280channels'})
+        out = new_m(visual_p)
+
+    output, contribution, mse, r2 = calculate_layer_contributions(voxel_select, out, opt)
+    
+
+    return output, mse, contribution
+
+def plot_output(output, voxel_select, epoch, opt):
+    # output = output.detach().cpu().numpy()
+    voxel_select = voxel_select.detach().cpu().numpy()
+    # plot output and voxel_select in a same figure
+    plt.figure()
+    # line width thinner
+    plt.plot(output[0], linewidth=0.5)
+    plt.plot(voxel_select[0], linewidth=0.5)
+    plt.legend(['output', 'voxel_select'])
+    plt.xlabel('voxel')
+    plt.ylabel('value')
+    plt.title(f'output and voxel_select {opt.roi}')
+    save_path = os.path.join(opt.result_path, f'output_and_voxel_select/')
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    plt.savefig(os.path.join(save_path, f'raw_fmri_{opt.roi}_{epoch}_v2.png'))
+    # plt.savefig(os.path.join(save_path, f'neurostorm_pretrain_mae0.5_{opt.roi}_{epoch}_v2.png'))
+    plt.close()
 
 def run_model_iscience(opt, inputs, model, criterion=None, i=0, print_attention=False, period=30, return_attention=False,test_svm=False):
     if not test_svm:
@@ -647,7 +731,7 @@ def visualize_rdms(opt, S_cnn, RSA_target, neural_data_item, epoch, save_dir="rd
     if not os.path.exists(save_path):
         os.makedirs(save_path)
     plt.savefig(os.path.join(save_path, f"rdm_epoch_{epoch:04d}.png"))
-    print(f"✅ Saved RDM visualization to {save_path}")
+    # print(f"✅ Saved RDM visualization to {save_path}")
     plt.close(fig) # Close the figure to free up memory
 
 
