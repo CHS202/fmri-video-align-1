@@ -1,6 +1,6 @@
 import numpy as np
 
-from core.utils import AverageMeter, process_data_item, run_model, calculate_accuracy,process_neural_data_item,run_neural_model,run_neural_model_v2,process_behavior_data_item
+from core.utils import AverageMeter, process_data_item, run_model, calculate_accuracy,process_neural_data_item,run_neural_model,run_neural_model_v2,process_behavior_data_item,run_model_contribution
 
 import time
 import torch
@@ -118,6 +118,51 @@ def co_train_epoch_behavior(epoch, train_loader,behavior_loader, model, criterio
     print("Train acc: {:.4f}".format(accuracies.avg))
 
     return gamma
+
+def train_epoch_contribution(epoch, train_loader, model, criterion, optimizer, opt):
+    print("# ---------------------------------------------------------------------- #")
+    print('Training at epoch {}'.format(epoch))
+    model.train()
+
+    batch_time = AverageMeter()
+    data_time = AverageMeter()
+    end_time = time.time()
+    mse_losses_sum = []
+    contribution_all = {}
+    for i, train_data_item in enumerate(train_loader):
+        neural_visual, RSA_output, neural_batch_size,visual_item = process_neural_data_item(opt, train_data_item)
+        _, neural_response,  _, _ = train_data_item
+        voxel_select = neural_response[opt.data_use].cuda()
+        data_time.update(time.time() - end_time)
+        output, _, contribution = run_model_contribution(opt, [neural_visual, voxel_select], model)
+        # print("output.shape",output.shape,"\nvoxel_select.shape",voxel_select.shape)
+        output = torch.from_numpy(output).float().cuda()
+        output.requires_grad_()
+        mse_loss = criterion(output, voxel_select)
+
+        # Backward and optimize
+        optimizer.zero_grad()
+        mse_loss.backward()
+        optimizer.step()
+
+        batch_time.update(time.time() - end_time)
+        end_time = time.time()
+        mse_losses_sum.append(mse_loss.item())
+        # sum contribution to contribution_all and average
+        for k in contribution:
+            if k not in contribution_all.keys():
+                contribution_all[k] = contribution[k]
+            else:
+                contribution_all[k] += contribution[k]
+
+    # average contribution
+    for k in contribution_all:
+        contribution_all[k] = contribution_all[k] / len(train_loader)
+    print("Epoch Time: {:.2f}min".format(batch_time.avg * len(train_loader) / 60))
+    print("Train total loss: {:.4f}".format(torch.mean(torch.tensor(mse_losses_sum))))
+
+    return torch.mean(torch.tensor(mse_losses_sum)), contribution_all
+
 
 def co_train_epoch(epoch, train_loader,neural_loader, model, criterion, optimizer, opt):
     print("# ---------------------------------------------------------------------- #")

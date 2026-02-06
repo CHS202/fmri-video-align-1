@@ -7,18 +7,20 @@ from core.utils import local2global_path, get_spatial_transform
 from core.dataset import get_training_set, get_validation_set, get_test_set, get_data_loader,get_neural_set,get_neural_loader
 from transforms.temporal import TSN
 from transforms.target import ClassLabel
-from train import train_epoch,co_train_epoch, co_train_epoch_lstm
-from validation import val_epoch_class
+from train import train_epoch,co_train_epoch, co_train_epoch_lstm, train_epoch_contribution
+from validation import val_epoch_class, val_epoch_contribution
 import numpy as np
 import os
 import torch
 from torch.optim import Adam
 from models.lstm import fMRI_LSTM
 import copy
-from core.utils import run_model_for_contribution
+from core.utils import run_model_get_contribution
 
 from models.visual_stream import VisualStream
 from models.visual_stream import CNN_3D
+from datasets.ve8 import NeuralValidDataset
+import torch.nn as nn
 
 os.environ['CUDA_VISIBLE_DEVICES']='0'
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32"
@@ -29,6 +31,7 @@ os.system("echo $CUDA_VISIBLE_DEVICES")
 os.system("echo $PYTORCH_CUDA_ALLOC_CONF")
 
 import gc
+import pandas as pd
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -271,7 +274,7 @@ def main_sig(alpha,neural_response,sig_test_run,network,split,roi):
         neural_loader = get_neural_loader(opt, neural_data, shuffle=True)
 
     if opt.get_layer_contribution:
-        run_model_for_contribution(opt, train_loader, neural_loader, model)
+        run_model_get_contribution(opt, train_loader, neural_loader, model)
         return
     result = np.zeros((opt.n_epochs,2))
     if opt.use_lstm:
@@ -373,6 +376,85 @@ def main_sig(alpha,neural_response,sig_test_run,network,split,roi):
         if (not opt.train_from_checkpoint) and (not opt.align_only_last_layer):
             np.savetxt(os.path.join(opt.result_path,'gamma_result.csv'), gamma,delimiter = ',')
     
+def main_contribution(alpha,neural_response, neural_response_valid,sig_test_run,network,split,roi):
+    opt = parse_opts()
+    opt.alpha = 1
+    opt.sig_test_run = sig_test_run
+    opt.network_choose = network
+    opt.split = split
+    opt.roi = roi
+    if opt.dataset_choose=='rt':
+        if opt.task == 'design':
+            opt.video_path = 'RT--imgs'
+            opt.video_raw_path = 'RT--raw'
+            opt.annotation_path = 'video_id_rt.csv'
+            opt.n_classes = 4
+
+    if opt.network_choose == 'mobilenet_v1':
+        opt.model_pretrained = 'pretrained-models/kinetics_mobilenet_2.0x_RGB_16_best.pth'
+    elif opt.network_choose == 'mobilenet_v2':
+        opt.model_pretrained = 'pretrained-models/kinetics_mobilenetv2_0.45x_RGB_16_best.pth'
+    elif opt.network_choose == 'resnet_18':
+        opt.model_pretrained = 'pretrained-models/resnet-18-kinetics.pth'
+    elif opt.network_choose == 'shufflenet_v1':
+        opt.model_pretrained = 'pretrained-models/kinetics_shufflenet_1.5x_G3_RGB_16_best.pth'
+    elif opt.network_choose == 'shufflenet_v2':
+        opt.model_pretrained = 'pretrained-models/kinetics_shufflenetv2_2.0x_RGB_16_best.pth'
+    elif opt.network_choose == 'squeezenet':
+        opt.model_pretrained = 'pretrained-models/kinetics_squeezenet_RGB_16_best.pth'
+    print('Experiment information:', 'video_path=', opt.video_path, 'annotation_path=', opt.annotation_path,
+          'n_classes=', opt.n_classes, 'dataset_choose=', opt.dataset_choose,'n_epoch=',opt.n_epochs)
+    
+    local2global_path(opt)
+    model, parameters,total_params = generate_model(opt)
+    print(f"Total Trainable Params: {total_params}")
+    criterion = nn.MSELoss()
+    criterion = criterion.cuda()
+    optimizer = get_optim(opt, parameters)
+
+    # validation
+    spatial_transform = get_spatial_transform(opt, 'test')
+    temporal_transform = TSN(seq_len=opt.seq_len, snippet_duration=opt.snippet_duration, center=False)
+    neural_train_data = get_neural_set(opt, spatial_transform, temporal_transform,neural_response)
+    neural_train_loader = get_neural_loader(opt, neural_train_data, shuffle=True)
+    neural_valid_data = NeuralValidDataset(opt,opt.neural_video_path,neural_response,opt.fps,spatial_transform,temporal_transform)
+    neural_valid_loader = get_neural_loader(opt, neural_valid_data, shuffle=True)
+
+    result = []
+    patience = 50
+    min_loss = float('inf')
+    for i in range(1, opt.n_epochs + 1):
+        mse_loss, contribution = train_epoch_contribution(i, neural_train_loader, model, criterion, optimizer, opt)
+        mse_loss_valid, contribution_valid = val_epoch_contribution(i, neural_valid_loader, model, criterion, optimizer, opt)
+        row_data = {
+            'epoch': i,
+            'mse_loss': mse_loss,
+            'mse_loss_valid': mse_loss_valid
+        }
+        # 3. Merge the contribution dictionary into this row
+        # This adds key1, key2, etc., to the same dictionary
+        row_data.update(contribution_valid)
+        
+        # 4. Append to history
+        result.append(row_data)
+
+        if mse_loss_valid < min_loss:
+            min_loss = mse_loss_valid
+            patience = 50
+            save_file_path = os.path.join(opt.ckpt_path, 'best.pth')
+            torch.save(model, save_file_path)
+            print('save model at epoch {}'.format(i))
+        else:
+            patience -= 1
+            if patience == 0:
+                break
+
+    # 5. Convert to DataFrame and Save
+    df = pd.DataFrame(result)
+    cols = ['epoch', 'mse_loss', 'mse_loss_valid'] + [c for c in df.columns if c not in ['epoch', 'mse_loss', 'mse_loss_valid']]
+    df = df[cols]
+    df.to_csv(os.path.join(opt.result_path,'result.csv'), index=False)
+
 
 def main_vanilla(sig_test_run,network,split):
     opt = parse_opts()
@@ -479,44 +561,52 @@ if __name__ == "__main__":
     opt = parse_opts()
     if opt.co_train == True:
         
-        # rois = ['EVC', 'RSC', 'PPA', 'TOS']
-        # for roi in rois:
-        #     opt.roi = roi
-        split_all = [1,3,4]
-        for split in split_all:
-            opt.split = split
-            neural_response =[]
-            print(opt.use_model)
-            if opt.use_model:
-                print('use_model')
-                # for Subject in range(1,6):
-                for Subject in range(1,2):
-                    print(Subject)
-                    if opt.use_lstm:
-                        neural_response.append(np.load('Neural_data/emotion_encoding_results/sub-'+str(Subject).zfill(2)+f'/voxel_select_remain_time_{opt.split}.npy'))
-                    else:
-                        neural_response.append(np.load('Neural_data/emotion_encoding_results/sub-'+str(Subject).zfill(2)+f'/voxel_select_new_{opt.split}.npy'))
-                        # neural_response.append(np.load('Neural_data/emotion_encoding_results/sub-'+str(Subject).zfill(2)+f'/voxel_select_lstm_feature_{opt.split}.npy')) # _lstm_feature_{opt.split}
-                        # neural_response.append(np.load('Neural_data/emotion_encoding_results/sub-'+str(Subject).zfill(2)+f'/neurostorm_embeddings_pretrain_mae0.5_{opt.split}.npy')) # neurostorm_embeddings_cls_{opt.split}
-                        print(f"split {opt.split} neural_response shape {neural_response[-1].shape}")
-                    # check if input has nan
-                    if np.isnan(neural_response[-1]).any():
-                        print('nan appears in neural_response')
-                        neural_response[-1][np.isnan(neural_response[-1])] = 0
+        rois = ['ALL', 'RSC', 'PPA', 'EVC', 'TOS']
+        for roi in rois:
+            opt.roi = roi
+            split_all = [1,2,3,4]
+            for split in split_all:
+                opt.split = split
+                neural_response =[]
+                neural_response_valid = []
+                print(opt.use_model)
+                if opt.use_model:
+                    print('use_model')
+                    # for Subject in range(1,6):
+                    for Subject in range(1,2):
+                        print(Subject)
+                        if opt.use_lstm:
+                            neural_response.append(np.load('Neural_data/emotion_encoding_results/sub-'+str(Subject).zfill(2)+f'/voxel_select_remain_time_{opt.split}.npy'))
+                        else:
+                            neural_response.append(np.load('Neural_data/emotion_encoding_results/sub-'+str(Subject).zfill(2)+f'/voxel_select_new_{opt.roi}_{opt.split}.npy'))
+                            # neural_response.append(np.load('Neural_data/emotion_encoding_results/sub-'+str(Subject).zfill(2)+f'/voxel_select_lstm_feature_{opt.split}.npy')) # _lstm_feature_{opt.split}
+                            # neural_response.append(np.load('Neural_data/emotion_encoding_results/sub-'+str(Subject).zfill(2)+f'/neurostorm_embeddings_pretrain_mae0.5_{opt.split}.npy')) # neurostorm_embeddings_cls_{opt.split}
+                            # print(f"split {opt.split} neural_response shape {neural_response[-1].shape}")
+                        if opt.train_only_layer_contribution:
+                            neural_response_valid.append(np.load('Neural_data/emotion_encoding_results/sub-'+str(Subject).zfill(2)+f'/neurostorm_embeddings_pretrain_mae0.5_{opt.roi}_valid_{opt.split}.npy'))
 
-                    # neural_response.append(np.load('Neural_data/emotion_encoding_results/Subject'+str(Subject)+'/voxel_select.npy'))
-            # print('neural_finish')
+                        # check if input has nan
+                        if np.isnan(neural_response[-1]).any():
+                            print('nan appears in neural_response')
+                            neural_response[-1][np.isnan(neural_response[-1])] = 0
 
-            # alpha_all = [1]
-            alpha_all = [5]
-            
-            network_all = ['resnet_18', 'mobilenet_v1', 'mobilenet_v2', 'shufflenet_v1', 'shufflenet_v2', 'squeezenet']
-            # network_all = ['squeezenet']
-            for network in network_all:
-                for alpha in alpha_all:
-                    for sig_test_run in range(1,2):
-                        main_sig(alpha,neural_response,sig_test_run,network,split, "")
-                        torch.cuda.empty_cache()
+                        # neural_response.append(np.load('Neural_data/emotion_encoding_results/Subject'+str(Subject)+'/voxel_select.npy'))
+                # print('neural_finish')
+
+                # alpha_all = [1]
+                alpha_all = [5]
+                
+                network_all = ['resnet_18', 'mobilenet_v1', 'mobilenet_v2', 'shufflenet_v1', 'shufflenet_v2', 'squeezenet']
+                # network_all = ['shufflenet_v2']
+                for network in network_all:
+                    for alpha in alpha_all:
+                        for sig_test_run in range(1,2):
+                            print(f"split {opt.split} neural_response shape {neural_response[-1].shape}")
+                            if opt.train_only_layer_contribution:
+                                main_contribution(alpha,neural_response,neural_response_valid,sig_test_run,network,split, opt.roi)
+                            else:
+                                main_sig(alpha,neural_response,sig_test_run,network,split, opt.roi)
+                            torch.cuda.empty_cache()
 
     else:
         network_all = ['resnet_18', 'mobilenet_v1', 'mobilenet_v2', 'shufflenet_v1', 'shufflenet_v2', 'squeezenet'] #['vaa']

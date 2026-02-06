@@ -126,13 +126,12 @@ def parse_opts():
                  help='use predicted response'
                  ),
             dict(name='--data_use',
-                 default='sub-01',
+                 default='sub-02',
                #   default='mean',
                  help='data use'
                  ),
             dict(name='--roi',
-                 default='EVC',
-               #   default='mean',
+                 default='',
                  help='which roi to calculate layer contribution (e.g. EVC, RSC, PPA, TOS)'
                  ),
             dict(name='--RSA_similarity_print',
@@ -177,8 +176,17 @@ def parse_opts():
                  help='align_only_last_layer'
                  ),
             dict(name='--get_layer_contribution',
-                 default=False,
+                 default=True,
                  help='calculate layer contribution'
+                 ),
+            dict(name='--contribution_method',
+                 default='ridge',
+                 type=str,
+                 help='ridge | rdm_corr'
+                 ),
+            dict(name='--train_only_layer_contribution',
+                 default=False,
+                 help='train only layer contribution'
                  ),
             dict(name='--mixup_pct',
                  default=.0,
