@@ -7,6 +7,9 @@ from models.shufflenetv2 import pretrained_shufflenet_v2, pretrained_shufflenet_
 from models.squeezenet import pretrained_squeezenet, pretrained_squeezenet_1
 from models.mobilenet import pretrained_mobilenet_v1, pretrained_mobilenet_v1_1
 from models.mobilenetv2 import pretrained_mobilenet_v2, pretrained_mobilenet_v2_1
+from models.alexnet3d import pretrained_alexnet_3d
+from models.vit3d import pretrained_vit_3d, pretrained_vit_3d_1
+from models.video_swin import pretrained_video_swin, pretrained_video_swin_1
 class VisualStream(nn.Module):
     def __init__(self,
                  snippet_duration,
@@ -26,7 +29,9 @@ class VisualStream(nn.Module):
         self._init_hyperparameters()
         self._init_encoder()
         self._init_attention_subnets()
-        self.gamma = torch.nn.Parameter(torch.ones(5)*(1/5), requires_grad=True)
+        # self.gamma = torch.nn.Parameter(torch.ones(25)*(1/25), requires_grad=True)
+        self.gamma = torch.nn.Parameter(torch.ones(20)*(1/20), requires_grad=True)
+        # self.gamma = torch.nn.Parameter(torch.ones(5)*(1/5), requires_grad=True)
     def _init_norm_val(self):
         self.NORM_VALUE = 255.0
         self.MEAN = 100.0 / self.NORM_VALUE
@@ -135,31 +140,86 @@ class CNN_3D(nn.Module):
                                         sample_size=self.sample_size,
                                         n_classes=self.n_classes,
                                         pretrained_model_path=self.pretrained_model_path)
-            self.gamma = torch.nn.Parameter(torch.ones(4) * (1 / 4), requires_grad=True)
+            # self.gamma = torch.nn.Parameter(torch.ones(20) * (1 / 20), requires_grad=True)
+            self.gamma = torch.nn.Parameter(torch.ones(16) * (1 / 16), requires_grad=True)
+            # self.gamma = torch.nn.Parameter(torch.ones(4) * (1 / 4), requires_grad=True)
         elif self.network_choose == 'shufflenet_v2':
             model = pretrained_shufflenet_v2(snippet_duration=self.snippet_duration,
                                     sample_size=self.sample_size,
                                     n_classes=self.n_classes,
                                     pretrained_model_path=self.pretrained_model_path)
+            # self.gamma = torch.nn.Parameter(torch.ones(15) * (1 / 15), requires_grad=True)
+            # self.gamma = torch.nn.Parameter(torch.ones(12) * (1 / 12), requires_grad=True)
             self.gamma = torch.nn.Parameter(torch.ones(3) * (1 / 3), requires_grad=True)
         elif self.network_choose == 'squeezenet':
             model = pretrained_squeezenet(snippet_duration=self.snippet_duration,
                                         sample_size=self.sample_size,
                                         n_classes=self.n_classes,
                                         pretrained_model_path=self.pretrained_model_path)
+            # self.gamma = torch.nn.Parameter(torch.ones(25) * (1 / 25), requires_grad=True)
+            # self.gamma = torch.nn.Parameter(torch.ones(20) * (1 / 20), requires_grad=True)
             self.gamma = torch.nn.Parameter(torch.ones(5) * (1 / 5), requires_grad=True)
         elif self.network_choose == 'mobilenet_v1':
             model = pretrained_mobilenet_v1(snippet_duration=self.snippet_duration,
                                         sample_size=self.sample_size,
                                         n_classes=self.n_classes,
                                         pretrained_model_path=self.pretrained_model_path)
+            # self.gamma = torch.nn.Parameter(torch.ones(30) * (1 / 30), requires_grad=True)
+            # self.gamma = torch.nn.Parameter(torch.ones(24) * (1 / 24), requires_grad=True)
             self.gamma = torch.nn.Parameter(torch.ones(6) * (1 / 6), requires_grad=True)
+            # n_layers = 6  # 12 / 4 ROIs
+
+            # # EVC: decreasing [3, 2, 1] → normalized
+            # evc_w = torch.tensor([n_layers - i for i in range(n_layers)], dtype=torch.float)
+            # evc_w = evc_w / evc_w.sum()
+
+            # # TOS, PPA, RSC: increasing [1, 2, 3] → normalized
+            # inc_w = torch.tensor([i + 1 for i in range(n_layers)], dtype=torch.float)
+            # inc_w = inc_w / inc_w.sum()
+
+            # init_gamma = torch.cat([evc_w, inc_w, inc_w, inc_w])  # shape: (12,)
+
+            # self.gamma = torch.nn.Parameter(init_gamma.clone(), requires_grad=True)
         elif self.network_choose == 'mobilenet_v2':
             model = pretrained_mobilenet_v2(snippet_duration=self.snippet_duration,
                                             sample_size=self.sample_size,
                                             n_classes=self.n_classes,
                                             pretrained_model_path=self.pretrained_model_path)
+            # self.gamma = torch.nn.Parameter(torch.ones(15) * (1 / 15), requires_grad=True)
+            # self.gamma = torch.nn.Parameter(torch.ones(12) * (1 / 12), requires_grad=True)
             self.gamma = torch.nn.Parameter(torch.ones(3) * (1 / 3), requires_grad=True)
+            
+        elif self.network_choose == 'alexnet_3d':
+            # NOTE: No public 3D AlexNet pretrained checkpoint exists.
+            # pretrained_alexnet_3d automatically inflates 2D ImageNet AlexNet
+            # conv weights when pretrained_model_path is None or not found.
+            model = pretrained_alexnet_3d(snippet_duration=self.snippet_duration,
+                                          sample_size=self.sample_size,
+                                          n_classes=self.n_classes,
+                                          pretrained_model_path=self.pretrained_model_path)
+            # AlexNet has 5 conv blocks; we group them into 5 gamma weights
+            self.gamma = torch.nn.Parameter(torch.ones(5) * (1 / 5), requires_grad=True)
+        elif self.network_choose == 'vit_3d':
+            model = pretrained_vit_3d(snippet_duration=self.snippet_duration,
+                                    sample_size=self.sample_size,
+                                    n_classes=self.n_classes,
+                                    pretrained_model_path=self.pretrained_model_path)
+            # 12 transformer blocks grouped into 4 stages for gamma-weighted RSA,
+            # to stay consistent with the ~3-6 element granularity used by the
+            # other backbones. Change this if you want per-block (12) gamma instead.
+            # self.gamma = torch.nn.Parameter(torch.ones(20) * (1 / 20), requires_grad=True)
+            self.gamma = torch.nn.Parameter(torch.ones(16) * (1 / 16), requires_grad=True)
+            # self.gamma = torch.nn.Parameter(torch.ones(4) * (1 / 4), requires_grad=True)
+        elif self.network_choose == 'video_swin':
+            model = pretrained_video_swin(snippet_duration=self.snippet_duration,
+                                        sample_size=self.sample_size,
+                                        n_classes=self.n_classes,
+                                        pretrained_model_path=self.pretrained_model_path,
+                                        variant='t')  # 't'/'s'/'b' = Tiny/Small/Base
+            # 4 windowed-attention stages, same structural role as resnet's layer1-4
+            # self.gamma = torch.nn.Parameter(torch.ones(20) * (1 / 20), requires_grad=True)
+            self.gamma = torch.nn.Parameter(torch.ones(16) * (1 / 16), requires_grad=True)
+            # self.gamma = torch.nn.Parameter(torch.ones(4) * (1 / 4), requires_grad=True)
         self.CNN = model
 
     def _init_hyperparameters(self):
