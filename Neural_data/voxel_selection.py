@@ -107,7 +107,7 @@ if __name__ == '__main__':
     # NOTE: For the dummy setup, we create 'fmri-clip' locally.
     # For your real data, change this path to the parent directory, e.g., 'D:\IDWB\video-annotation\data'
     FMRI_DATA_ROOT = "/mnt/d/IDWB/video-annotation/data/fmri-clip-gd" 
-    SUBJECT_ID = "02"
+    SUBJECT_ID = "01"
     SPLIT = 1
     for SPLIT in [1, 2, 3, 4]:
         config = {
@@ -115,7 +115,7 @@ if __name__ == '__main__':
             "mat_order_file": f"video_order_rt_{SPLIT}.mat",
             "fmri_subject_dir": os.path.join(FMRI_DATA_ROOT, f"sub-{SUBJECT_ID}"),
             "subject_base_name": f"sub-{SUBJECT_ID}",
-            "rois": ['ALL','EVC', 'PPA', 'RSC', 'TOS'],
+            "rois": ['EVC', 'PPA', 'RSC', 'TOS'],
             # "rois": ['ALL'],
             "output_dir": f"emotion_encoding_results/sub-{SUBJECT_ID}",
             # "output_file_name": f"voxel_select_remain_time_{SPLIT}.npy"
