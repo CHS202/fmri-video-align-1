@@ -51,7 +51,7 @@ def expand_tsv(input_file, output_file):
 
 if __name__ == "__main__":
     # Specify your input and output files
-    subs = ['02']
+    subs = ['06', '08']
     run = ['01', '02']
     ses = ['01','02']
 

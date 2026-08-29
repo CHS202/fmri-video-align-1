@@ -9,7 +9,8 @@ def split_nifi_by_events(
     output_dir, 
     subject, 
     ses_idx, 
-    run_idx
+    run_idx,
+    # hrf_delay_sec=4.0
 ):
     """
     Splits a 4D NIfTI file into smaller NIfTI files based on a TSV event file.
@@ -37,6 +38,8 @@ def split_nifi_by_events(
         raise ValueError("TR (Repetition Time) not found in NIfTI header. Please specify TR manually in the code.")
     
     print(f"Detected TR: {tr} seconds")
+    # print how many trs
+    print(f"Number of TRs: {data.shape[3]}")
 
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
@@ -89,25 +92,27 @@ def split_nifi_by_events(
 if __name__ == "__main__":
     # Define your paths here
     # You can replace these with your actual file paths
-    subject = "01"
+    subject = ['01', '02', '03', '06', '08', '09', '12']
     ses_idxs = ["01", "02"]
     run_idxs = ["01", "02"]
     
-    for ses_idx in ses_idxs:
-        for run_idx in run_idxs:
-            # Create dummy files for demonstration (You don't need this block if you have real files)
-            # ----------------------------------------------------------------
-            # (This is just to make the script runnable for testing purposes)
-            nii_name = f"/mnt/d/IDWB/ds_formal/derivatives/glm_denoise_results/sub-{subject}/ses-{ses_idx}/sub-{subject}_ses-{ses_idx}_task-roomtour_run-{run_idx}_space-MNI152NLin6Asym_res-2_desc-denoised_bold.nii.gz"
-            tsv_name = f"/mnt/d/IDWB/ds_formal/sub-{subject}/ses-{ses_idx}/func/sub-{subject}_ses-{ses_idx}_task-roomtour_run-{run_idx}_events_aug.tsv"
-            # ----------------------------------------------------------------
+    for sub in subject:
+        for ses_idx in ses_idxs:
+            for run_idx in run_idxs:
+                # Create dummy files for demonstration (You don't need this block if you have real files)
+                # ----------------------------------------------------------------
+                # (This is just to make the script runnable for testing purposes)
+                nii_name = f"/mnt/d/IDWB/ds_formal/derivatives/glm_denoise_results/sub-{sub}/ses-{ses_idx}/sub-{sub}_ses-{ses_idx}_task-roomtour_run-{run_idx}_space-MNI152NLin6Asym_res-2_desc-denoised_bold.nii.gz"
+                tsv_name = f"/mnt/d/IDWB/ds_formal/sub-{sub}/ses-{ses_idx}/func/sub-{sub}_ses-{ses_idx}_task-roomtour_run-{run_idx}_events_aug.tsv"
+                # ----------------------------------------------------------------
 
-            # RUN THE FUNCTION
-            split_nifi_by_events(
-                nii_path=nii_name,           # Path to your .nii or .nii.gz file
-                tsv_path=tsv_name,           # Path to your .tsv file
-                output_dir=f"/mnt/d/IDWB/ds_formal/derivatives/gdfmri_clips/sub-{subject}/ses-{ses_idx}/",      # Where to save the new files
-                subject=subject,                  # sub-01
-                ses_idx=ses_idx,                      # ses-01
-                run_idx=run_idx                      # run-01
-            )
+                # RUN THE FUNCTION
+                split_nifi_by_events(
+                    nii_path=nii_name,           # Path to your .nii or .nii.gz file
+                    tsv_path=tsv_name,           # Path to your .tsv file
+                    output_dir=f"/mnt/d/IDWB/ds_formal/derivatives/gdfmri_clips/sub-{sub}/ses-{ses_idx}/",      # Where to save the new files
+                    subject=sub,                  # sub-01
+                    ses_idx=ses_idx,                      # ses-01
+                    run_idx=run_idx,                      # run-01
+                    # hrf_delay_sec=4.0
+                )

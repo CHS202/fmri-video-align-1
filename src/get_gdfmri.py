@@ -93,7 +93,7 @@ def load_roi_masks(rois_base_path, roi_names):
         return None
 
 
-def process_subject_session(sub, ses, data_base_path, original_roi_niftis, requested_rois, output_base_path, tr_seconds, num_trs_to_average):
+def process_subject_session(sub, ses, data_base_path, original_roi_niftis, requested_rois, output_base_path, tr_seconds, num_trs_to_average, hrf_delay_seconds=4.0):
     """
     Processes all data for a single subject's session.
     """
@@ -159,7 +159,7 @@ def process_subject_session(sub, ses, data_base_path, original_roi_niftis, reque
         events_df = pd.read_csv(event_file_path, sep='\t')
 
         for index, trial in events_df.iterrows():
-            onset_sec = trial['onset']
+            onset_sec = trial['onset'] + hrf_delay_seconds
             start_tr = int(round(onset_sec / tr_seconds))
             end_tr = start_tr + num_trs_to_average
 
@@ -172,7 +172,7 @@ def process_subject_session(sub, ses, data_base_path, original_roi_niftis, reque
             
             # Now, apply each mask to this trial's data
             for roi_name, roi_mask in resampled_roi_masks.items():
-                if roi_name == "ALL":
+                if roi_name in requested_rois:
                     # Apply mask, resulting in a (n_voxels, n_trs) array
                     masked_trial_data = trial_trs_data[roi_mask]
                     # print(roi_name, "masked data shape:", masked_trial_data.shape)
@@ -262,6 +262,7 @@ def main():
     # --- fMRI scan parameters ---
     TR_SECONDS = 1.0  # IMPORTANT: Set this to your scan's Repetition Time in seconds
     NUM_TRS_TO_AVERAGE = 5 # Number of TRs to average per trial, starting at onset
+    HRF_DELAY_SECONDS = 4.0
     
     # --- List of subjects and sessions to process ---
     # You can define them manually, e.g., SUBJECTS = ['01', '02']
@@ -274,12 +275,12 @@ def main():
     # except FileNotFoundError:
     #     print(f"ERROR: Could not automatically find subjects in {DATA_BASE_PATH}. Please check the path.", file=sys.stderr)
     #     sys.exit(1)
-    SUBJECTS = ['02']
+    SUBJECTS = ['02', '03', '06', '08', '09', '12']
         
     SESSIONS = ['01', '02'] # Example: ['01', '02'] or just ['01'] if there's only one
 
     # --- List of ROIs to process (SNR will be added automatically per subject) ---
-    ROIS_TO_LOAD = ["ALL"]
+    ROIS_TO_LOAD = ["ALL", "RSC", "PPA", "TOS", "EVC"]
     
     # --- PRE-PROCESSING ---
     # Load original ROI masks once to avoid reloading them for every subject
@@ -297,18 +298,19 @@ def main():
                 process_subject_session(
                     sub, ses, DATA_BASE_PATH, original_roi_niftis, 
                     ROIS_TO_LOAD, # Pass the original user request
-                    OUTPUT_BASE_PATH, TR_SECONDS, NUM_TRS_TO_AVERAGE
+                    OUTPUT_BASE_PATH, TR_SECONDS, NUM_TRS_TO_AVERAGE,
+                    HRF_DELAY_SECONDS  
                 )
             except Exception as e:
                 print(f"FATAL ERROR processing sub-{sub}, ses-{ses}: {e}", file=sys.stderr)
 
     # load the output files
-    load_output_files(OUTPUT_BASE_PATH, sub, '01', "ALL", "SPACE_06_MODN_030")
-    load_output_files(OUTPUT_BASE_PATH, sub, '02', "ALL", "SPACE_11_MUJI_022")
-    # load_output_files(OUTPUT_BASE_PATH, sub, ses, "PPA", "SPACE_11_MUJI_022")
-    # load_output_files(OUTPUT_BASE_PATH, sub, ses, "TOS", "SPACE_11_MUJI_022")
-    # load_output_files(OUTPUT_BASE_PATH, sub, ses, "RSC", "SPACE_11_MUJI_022")
-    # load_output_files(OUTPUT_BASE_PATH, sub, ses, "SNR", "SPACE_11_MUJI_022")
+    # load_output_files(OUTPUT_BASE_PATH, sub, '01', "ALL", "SPACE_06_MODN_030")
+    # load_output_files(OUTPUT_BASE_PATH, sub, '02', "ALL", "SPACE_11_WABI_022")
+    # load_output_files(OUTPUT_BASE_PATH, sub, '01', "PPA", "SPACE_05_MUJI_022")
+    # load_output_files(OUTPUT_BASE_PATH, sub, '01', "TOS", "SPACE_06_MUJI_030")
+    # load_output_files(OUTPUT_BASE_PATH, sub, '02', "RSC", "SPACE_11_MODN_022")
+    # load_output_files(OUTPUT_BASE_PATH, sub, '02', "EVC", "SPACE_12_WABI_025")
     
     print("\nPipeline finished.")
 
