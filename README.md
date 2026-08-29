@@ -6,3 +6,5 @@ run_vlm.sh
 run_vlm_gemini.sh  
 models/vlm_backbones.py  
 core/prompts.py
+BrainGuided/video_id_rt_full.csv
+BrainGuided/video_id_rt_full_annot.csv
