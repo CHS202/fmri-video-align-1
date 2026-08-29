@@ -3,8 +3,8 @@ import cv2
 from tqdm import tqdm
 
 # Set the input and output directories
-input_dir = "RT--raw" # VideoEmotion8--raw, EK6--raw
-output_dir = "RT--imgs" # VideoEmotion8--imgs, EK6--imgs
+input_dir = "video--raw" # VideoEmotion8--raw, EK6--raw
+output_dir = "video--imgs" # VideoEmotion8--imgs, EK6--imgs
 
 # Create the output directory if it doesn't exist
 if not os.path.exists(output_dir):
@@ -19,7 +19,7 @@ for root, dirs, files in os.walk(input_dir):
 
 # Create a progress bar for the total process
 total_frames = 0
-pbar = tqdm(total=total_videos * 1 * 16, desc="Processing videos", unit="frame")
+pbar = tqdm(total=total_videos * 1 * 32, desc="Processing videos", unit="frame")
 
 # Loop through the input directory and its subdirectories
 for root, dirs, files in os.walk(input_dir):
@@ -48,8 +48,8 @@ for root, dirs, files in os.walk(input_dir):
                 # print("start_frame", "end_frame", start_frame, end_frame)
                 
                 # Sample 16 frames from the segment
-                for i in range(16):
-                    frame_index = int(start_frame + i * (end_frame - start_frame) / 15)
+                for i in range(32):
+                    frame_index = int(start_frame + i * (end_frame - start_frame) / 31)
                     # print("frame_index", frame_index)
                     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
                     ret, frame = cap.read()

@@ -32,6 +32,10 @@ def generate_video_csv(root_dir, subdirs, output_csv_path):
             for filename in sorted(os.listdir(current_dir_path)):
                 # Process only if the file is an .mp4 video
                 if filename.lower().endswith(".mp4"):
+                    stem_parts = os.path.splitext(filename)[0].split("_")
+                    clip = stem_parts[-1] if len(stem_parts) > 3 else None
+                    if clip == "000":
+                        continue  # skip the reference/base clip
                     # Create the relative path string as required
                     video_name_and_dir = f"{subdir}/{filename}"
 
@@ -53,6 +57,95 @@ def generate_video_csv(root_dir, subdirs, output_csv_path):
             writer.writerow(["Video ID", "Video Name and Directory"])
 
             # Write all the video data rows
+            writer.writerows(video_data)
+
+        print(f"\nSuccessfully generated '{output_csv_path}' with {len(video_data)} video entries.")
+    except IOError as e:
+        print(f"Error: Could not write to file '{output_csv_path}': {e}")
+
+def generate_video_csv_w_annot(root_dir, subdirs, output_csv_path, annotation_csv_path=None):
+    """
+    Scans subdirectories for .mp4 files and generates a CSV file mapping
+    a unique ID to each video's relative path, optionally merging annotation values.
+
+    Args:
+        root_dir (str): The main directory containing the video subdirectories.
+        subdirs (list): A list of subdirectory names to scan for videos.
+        output_csv_path (str): The file path for the generated CSV.
+        annotation_csv_path (str, optional): Path to the annotation CSV file.
+                                             Its 'Design' column is matched against
+                                             '{subdir}_{stem}' (e.g. SPACE_05_MODN).
+    """
+    # --- Load annotation data if a path was provided ---
+    annotation_lookup = {}   # key: design name (e.g. "SPACE_05_MODN"), value: dict of annotation columns
+    annotation_columns = []  # ordered list of annotation column names (everything except "Design")
+
+    if annotation_csv_path:
+        try:
+            with open(annotation_csv_path, 'r', newline='', encoding='utf-8') as ann_file:
+                reader = csv.DictReader(ann_file)
+                annotation_columns = [col for col in reader.fieldnames if col != "Design"]
+                for row in reader:
+                    design_key = row["Design"].strip()
+                    annotation_lookup[design_key] = {col: row[col] for col in annotation_columns}
+            print(f"Loaded {len(annotation_lookup)} annotation entries from '{annotation_csv_path}'.")
+        except (IOError, KeyError) as e:
+            print(f"Warning: Could not load annotation file '{annotation_csv_path}': {e}")
+            annotation_columns = []
+
+    # --- Scan for videos ---
+    video_data = []
+    video_id_counter = 1
+    unmatched = []
+
+    print(f"Scanning for videos in '{root_dir}'...")
+
+    for subdir in subdirs:
+        current_dir_path = os.path.join(root_dir, subdir)
+
+        if not os.path.isdir(current_dir_path):
+            print(f"Warning: Directory '{current_dir_path}' not found. Skipping.")
+            continue
+
+        try:
+            for filename in sorted(os.listdir(current_dir_path)):
+                if filename.lower().endswith(".mp4"):
+                    stem_parts = os.path.splitext(filename)[0].split("_")
+                    clip = stem_parts[-1] if len(stem_parts) > 3 else None
+                    if clip == "000":
+                        continue  # skip the reference/base clip
+
+                    video_name_and_dir = f"{subdir}/{filename}"
+
+                    design_key = os.path.splitext(filename)[0].split("_")[0:3]
+                    design_key = "_".join(design_key)
+                    print(f"Design key: {design_key}")
+
+                    # Look up annotation values (empty strings if not found)
+                    if annotation_columns:
+                        if design_key in annotation_lookup:
+                            annot_values = [annotation_lookup[design_key][col] for col in annotation_columns]
+                            video_data.append([video_id_counter, video_name_and_dir] + annot_values)
+                            video_id_counter += 1
+                        else:
+                            annot_values = [""] * len(annotation_columns)
+                            unmatched.append(design_key)
+                    else:
+                        annot_values = []
+
+                    
+
+        except OSError as e:
+            print(f"Error accessing directory '{current_dir_path}': {e}")
+
+    if unmatched:
+        print(f"Warning: No annotation match found for {len(unmatched)} video(s): {unmatched}")
+
+    # --- Write output CSV ---
+    try:
+        with open(output_csv_path, 'w', newline='', encoding='utf-8') as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(["Video ID", "Video Name and Directory"] + annotation_columns)
             writer.writerows(video_data)
 
         print(f"\nSuccessfully generated '{output_csv_path}' with {len(video_data)} video entries.")
@@ -131,14 +224,14 @@ def generate_4_splits(csv_path, train_output_path, test_output_path):
     # --- IMPORTANT ---
     # You MUST customize this list based on your specific video names.
     all_test_keys = [
-        # ["SPACE_05", "SPACE_09", "SPACE_01"],  # Test keys for Split 1
-        # ["SPACE_06", "SPACE_10", "SPACE_02"],  # Test keys for Split 2
-        # ["SPACE_07", "SPACE_11", "SPACE_03"],  # Test keys for Split 3
-        # ["SPACE_08", "SPACE_12", "SPACE_04"]   # Test keys for Split 4
-        ["MODN"],  # Test keys for Split 1
-        ["MUJI"],  # Test keys for Split 2
-        ["SCAN"],  # Test keys for Split 3
-        ["WABI"]   # Test keys for Split 4
+        ["SPACE_05", "SPACE_09"],  # Test keys for Split 1
+        ["SPACE_06", "SPACE_10"],  # Test keys for Split 2
+        ["SPACE_07", "SPACE_11"],  # Test keys for Split 3
+        ["SPACE_08", "SPACE_12"]   # Test keys for Split 4
+        # ["MODN"],  # Test keys for Split 1
+        # ["MUJI"],  # Test keys for Split 2
+        # ["SCAN"],  # Test keys for Split 3
+        # ["WABI"]   # Test keys for Split 4
     ]
 
     print(f"\n--- Generating 4 Train/Test Splits from '{csv_path}' ---")
@@ -178,12 +271,19 @@ def generate_4_splits(csv_path, train_output_path, test_output_path):
 
             # --- MODIFICATION START ---
             # 3. Save the .mat file for the CURRENT split inside the loop
-            mat_output_path = f'video_order_rt_space_{i+1}.mat'
+            mat_output_path = f'video_order_rt_annot_{i+1}.mat'
             with h5py.File(mat_output_path, 'w') as hf:
                 # Since the split is identified by the filename,
                 # we can use a consistent dataset name inside.
                 hf.create_dataset('video_order', data=train_ids_np)
             print(f"✅ Saved training order to '{mat_output_path}'")
+
+            mat_output_path = f'video_order_rt_annot_valid_{i+1}.mat'
+            with h5py.File(mat_output_path, 'w') as hf:
+                # Since the split is identified by the filename,
+                # we can use a consistent dataset name inside.
+                hf.create_dataset('video_order', data=test_ids_np)
+            print(f"✅ Saved validation order to '{mat_output_path}'")
             # --- MODIFICATION END ---
 
 
@@ -206,23 +306,30 @@ def generate_4_splits(csv_path, train_output_path, test_output_path):
     except Exception as e:
         print(f"❌ An error occurred during split generation: {e}")
 
-
+import sys
 # --- Main execution block ---
 if __name__ == '__main__':
     # --- Configuration ---
-    ROOT_VIDEO_DIRECTORY = "RT--raw"
+    ROOT_VIDEO_DIRECTORY = "video--raw"
     SUBDIRECTORIES_TO_SCAN = ["MODN", "MUJI", "SCAN", "WABI"]
-    OUTPUT_CSV_FILE = "video_id_rt.csv"
-    TRAIN_IDX_FILE = "train_idx_rt_space.npy"
-    TEST_IDX_FILE = "test_idx_rt_space.npy"
+    OUTPUT_CSV_FILE = "video_id_rt_full.csv"
+    OUTPUT_CSV_FILE_ANNOT = "video_id_rt_full_annot.csv"
+    TRAIN_IDX_FILE = "train_idx_rt_full.npy"
+    TEST_IDX_FILE = "test_idx_rt_full.npy"
+    TRAIN_IDX_FILE_ANNOT = "train_idx_rt_full_annot.npy"
+    TEST_IDX_FILE_ANNOT = "test_idx_rt_full_annot.npy"
+    ANNOT_FILE = "/mnt/c/IDWB/annotation/annot_normalized_avg28.csv"
     # MAT_ORDER_FILE = "video_order_rt.mat"
 
     # 2. Run the main function to generate the CSV.
-    # generate_video_csv(ROOT_VIDEO_DIRECTORY, SUBDIRECTORIES_TO_SCAN, OUTPUT_CSV_FILE)
+    generate_video_csv(ROOT_VIDEO_DIRECTORY, SUBDIRECTORIES_TO_SCAN, OUTPUT_CSV_FILE)
+    generate_video_csv_w_annot(ROOT_VIDEO_DIRECTORY, SUBDIRECTORIES_TO_SCAN, OUTPUT_CSV_FILE_ANNOT, ANNOT_FILE)
+    sys.exit(0)
 
     # 3. Generate the train/test split .npy files from the CSV.
     # generate_train_test_split(OUTPUT_CSV_FILE, TRAIN_IDX_FILE, TEST_IDX_FILE, MAT_ORDER_FILE)
     generate_4_splits(OUTPUT_CSV_FILE, TRAIN_IDX_FILE, TEST_IDX_FILE)
+    generate_4_splits(OUTPUT_CSV_FILE_ANNOT, TRAIN_IDX_FILE_ANNOT, TEST_IDX_FILE_ANNOT)
 
     # 4. (Optional) Print the content of the generated files for verification.
     print(f"\n--- Contents of '{OUTPUT_CSV_FILE}' ---")
@@ -243,8 +350,8 @@ if __name__ == '__main__':
 
     
     for i in range(1,5):
-        print(f"\n--- Contents of train_order_rt_space_{i}.mat (read using h5py) ---")
-        mat_output_path = f'video_order_rt_space_{i}.mat'
+        print(f"\n--- Contents of valid_order_rt_annot_{i}.mat (read using h5py) ---")
+        mat_output_path = f'video_order_rt_annot_{i}.mat'
         try:
             with h5py.File(mat_output_path, 'r') as f:
                 video_order = np.array(f['video_order'])
