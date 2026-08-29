@@ -151,8 +151,9 @@ class VE8Dataset(data.Dataset):
         snippets = torch.stack(snippets, 0)
         target = self.target_transform(data_item)
         visualization_item = [data_item['video_id']]
+        annot = data_item['annot']
 
-        return snippets, target, visualization_item
+        return snippets, target, visualization_item, annot
 
     def __len__(self):
         return len(self.data)
@@ -169,6 +170,57 @@ class NeuralDataset(data.Dataset):
                  target_transform=None,
                  get_loader=get_default_video_loader,):
         self.neural_data = make_neural_dataset(opt=opt,
+            video_root_path=neural_video_path,
+            neural_response=neural_response,
+            fps=fps,
+        )
+        self.spatial_transform = spatial_transform
+        self.temporal_transform = temporal_transform
+        self.loader = get_loader()
+        self.fps = fps
+        self.ORIGINAL_FPS = 30
+
+    def __getitem__(self, index):
+        data_item = self.neural_data[index]
+        video_path = data_item['video']
+        raw_path = data_item['raw']
+        frame_indices = data_item['frame_indices']
+        snippets_frame_idx = self.temporal_transform(frame_indices)
+
+
+        snippets = []
+        for snippet_frame_idx in snippets_frame_idx:
+            snippet = self.loader(video_path, snippet_frame_idx)
+            snippets.append(snippet)
+
+        self.spatial_transform.randomize_parameters()
+        snippets_transformed = []
+        for snippet in snippets:
+            snippet = [self.spatial_transform(img) for img in snippet]
+            snippet = torch.stack(snippet, 0).permute(1, 0, 2, 3)
+            snippets_transformed.append(snippet)
+        snippets = snippets_transformed
+        neural_snippets = torch.stack(snippets, 0)
+
+        neural_visualization_item = [data_item['video_id']]
+        neural_response = data_item['neural']
+        target = data_item['label'] # for LSTM
+
+        return neural_snippets, neural_response,neural_visualization_item, target # return target for LSTM
+
+    def __len__(self):
+        return len(self.neural_data)
+    
+class NeuralValidDataset(data.Dataset):
+    def __init__(self,opt,
+                 neural_video_path,
+                 neural_response,
+                 fps=30,
+                 spatial_transform=None,
+                 temporal_transform=None,
+                 target_transform=None,
+                 get_loader=get_default_video_loader,):
+        self.neural_data = make_neural_dataset_valid(opt=opt,
             video_root_path=neural_video_path,
             neural_response=neural_response,
             fps=fps,
@@ -259,7 +311,7 @@ class BehaviorDataset(data.Dataset):
 
     def __len__(self):
         return len(self.behavior_data)
-
+import sys
 def get_video_class(opt,subset,annotation_path):
     print('split=', opt.split)
     if opt.dataset_choose == 've8':
@@ -275,6 +327,9 @@ def get_video_class(opt,subset,annotation_path):
         elif opt.task == 'space':
             split_train = np.load('train_idx_rt_space.npy')
             split_test = np.load('test_idx_rt_space.npy')
+        elif opt.task == 'annot' or opt.task == 'annot-reg':
+            split_train = np.load('train_idx_rt_annot.npy')
+            split_test = np.load('test_idx_rt_annot.npy')
         # reshape to (1, N)
         # split_train = np.expand_dims(split_train, axis=0)
         # split_test = np.expand_dims(split_test, axis=0)
@@ -289,10 +344,21 @@ def get_video_class(opt,subset,annotation_path):
     for i in list(index):
         if opt.task == 'design':
             video_names.append(df.loc[i-1,'Video Name and Directory']) # MODN/SPACE_05_MODN_clip_000
-            annotations.append({'label':df.loc[i-1,'Video Name and Directory'].split('/')[0]})  # MODN
+            annotations.append({'label':df.loc[i-1,'Video Name and Directory'].split('/')[0], 'annot':torch.tensor([])})  # MODN
         elif opt.task == 'space':
             video_names.append(df.loc[i-1,'Video Name and Directory']) # MODN/SPACE_05_MODN_clip_000
-            annotations.append({'label':df.loc[i-1,'Video Name and Directory'].split('/')[1][:8]}) # SPACE_05
+            annotations.append({'label':df.loc[i-1,'Video Name and Directory'].split('/')[1][:8], 'annot':torch.tensor([])}) # SPACE_05
+        elif opt.task == 'annot':
+            video_names.append(df.loc[i-1,'Video Name and Directory']) # MODN/SPACE_05_MODN_clip_000
+            annot_value = df.loc[i-1].iloc[2:].values.tolist()
+            thresholds = df.iloc[:, 2:].mean().values
+            # print(thresholds)
+            annot_value_binary = np.where(np.array(annot_value) > thresholds, 1, 0)
+            annotations.append({'label':df.loc[i-1,'Video Name and Directory'].split('/')[0], 'annot':annot_value_binary}) # SPACE_05
+        elif opt.task == 'annot-reg':
+            video_names.append(df.loc[i-1,'Video Name and Directory']) # MODN/SPACE_05_MODN_clip_000
+            annot_value = df.loc[i-1].iloc[2:].values.tolist()
+            annotations.append({'label':df.loc[i-1,'Video Name and Directory'].split('/')[0], 'annot':torch.tensor(annot_value)}) # SPACE_05
     return video_names,annotations
 
 
@@ -309,6 +375,8 @@ def make_dataset(opt,video_root_path, annotation_path,  subset, fps=30,dataset_c
             class_to_idx = {'MODN': 0, 'MUJI': 1, 'SCAN': 2, 'WABI': 3}
         elif opt.task == 'space':
             class_to_idx = {'SPACE_05': 0, 'SPACE_06': 1, 'SPACE_07': 2, 'SPACE_08': 3, 'SPACE_09': 4, 'SPACE_10': 5, 'SPACE_11': 6, 'SPACE_12': 7}
+        elif opt.task == 'annot' or opt.task == 'annot-reg':
+            class_to_idx = {'MODN': 0, 'MUJI': 1, 'SCAN': 2, 'WABI': 3}
     idx_to_class = {}
     for name, label in class_to_idx.items():
         idx_to_class[label] = name
@@ -338,6 +406,7 @@ def make_dataset(opt,video_root_path, annotation_path,  subset, fps=30,dataset_c
         }
         assert len(annotations) != 0
         sample['label'] = class_to_idx[annotations[i]['label']]
+        sample['annot'] = annotations[i]['annot']
 
         ORIGINAL_FPS = 30
         step = ORIGINAL_FPS // fps
@@ -420,22 +489,37 @@ def make_neural_dataset(opt,video_root_path, neural_response,fps=30):
         class_to_idx = {'MODN': 0, 'MUJI': 1, 'SCAN': 2, 'WABI': 3}
     elif opt.task == 'space':
         class_to_idx = {'SPACE_05': 0, 'SPACE_06': 1, 'SPACE_07': 2, 'SPACE_08': 3, 'SPACE_09': 4, 'SPACE_10': 5, 'SPACE_11': 6, 'SPACE_12': 7}
+    elif opt.task == 'annot' or opt.task == 'annot-reg':
+        class_to_idx = {'MODN': 0, 'MUJI': 1, 'SCAN': 2, 'WABI': 3}
 
     import csv
 
     try:
         video_id_to_name = {}
-        df = pd.read_csv("/mnt/d/IDWB/Video-Emotion/BrainGuided/video_id_rt.csv")
-        with open("/mnt/d/IDWB/Video-Emotion/BrainGuided/video_id_rt.csv", 'r', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            next(reader) # Skip header
-            for row in reader:
-                video_id_to_name[int(row[0])] = row[1]
+        if opt.task == 'annot' or opt.task == 'annot-reg':
+            df = pd.read_csv("/mnt/d/IDWB/Video-Emotion/BrainGuided/video_id_rt_annot.csv")
+            with open("/mnt/d/IDWB/Video-Emotion/BrainGuided/video_id_rt_annot.csv", 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                next(reader) # Skip header
+                for row in reader:
+                    video_id_to_name[int(row[0])] = row[1]
+        else:
+            df = pd.read_csv("/mnt/d/IDWB/Video-Emotion/BrainGuided/video_id_rt.csv")
+            with open("/mnt/d/IDWB/Video-Emotion/BrainGuided/video_id_rt.csv", 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                next(reader) # Skip header
+                for row in reader:
+                    video_id_to_name[int(row[0])] = row[1]
     except FileNotFoundError:
         print(f"Error: Input file not found: '/mnt/d/IDWB/Video-Emotion/BrainGuided/video_id_rt.csv'")
         return
 
-    video_order = np.array(h5py.File(f'Neural_data/video_order_rt_{opt.split}.mat')['video_order'])
+    if opt.task == 'annot' or opt.task == 'annot-reg':
+        video_order = np.array(h5py.File(f'Neural_data/video_order_rt_annot_{opt.split}.mat')['video_order'])
+    elif opt.task == 'space':
+        video_order = np.array(h5py.File(f'Neural_data/video_order_rt_space_{opt.split}.mat')['video_order'])
+    else:
+        video_order = np.array(h5py.File(f'Neural_data/video_order_rt_{opt.split}.mat')['video_order'])
     # reshape to (1, N)
     video_order = video_order.reshape(1, -1)
     print(video_order.shape)
@@ -467,6 +551,111 @@ def make_neural_dataset(opt,video_root_path, neural_response,fps=30):
             sample['label'] = class_to_idx[df.loc[i-1,'Video Name and Directory'].split('/')[0]]
         elif opt.task == 'space':
             sample['label'] = class_to_idx[df.loc[i-1,'Video Name and Directory'].split('/')[1][:8]]
+        elif opt.task == 'annot':
+            sample['label'] = class_to_idx[df.loc[i-1,'Video Name and Directory'].split('/')[0]]
+            annot_value = df.loc[i-1].iloc[2:].values.tolist()
+            thresholds = df.iloc[:, 2:].mean().values
+            # print(thresholds)
+            annot_value_binary = np.where(np.array(annot_value) > thresholds, 1, 0)
+            sample['annot'] = annot_value_binary
+        elif opt.task == 'annot-reg':
+            sample['label'] = class_to_idx[df.loc[i-1,'Video Name and Directory'].split('/')[0]]
+            annot_value = df.loc[i-1].iloc[2:].values.tolist()
+            sample['annot'] = annot_value
+
+
+        ORIGINAL_FPS = 30
+        step = ORIGINAL_FPS // fps
+        neural_index = np.where(video_order==int(i))[1][0]
+        # print("neural_index", neural_index)
+        sample['frame_indices'] = list(range(1, n_frames + 1, step))
+        if opt.data_use == 'mean':
+            sample['neural']={'sub-01':neural_response[0][neural_index].squeeze(0),'sub-02':neural_response[1][neural_index].squeeze(0),'sub-03':neural_response[2][neural_index].squeeze(0),'sub-04':neural_response[3][neural_index].squeeze(0),'sub-05':neural_response[4][neural_index].squeeze(0)}
+        else:
+            sample['neural'] = {opt.data_use:neural_response[0][neural_index]}
+        dataset.append(sample)
+    return dataset
+
+def make_neural_dataset_valid(opt,video_root_path, neural_response,fps=30):
+    video_ids = [i+1 for i in range(992)]
+    print(len(video_ids))
+    if opt.task == 'design':
+        class_to_idx = {'MODN': 0, 'MUJI': 1, 'SCAN': 2, 'WABI': 3}
+    elif opt.task == 'space':
+        class_to_idx = {'SPACE_05': 0, 'SPACE_06': 1, 'SPACE_07': 2, 'SPACE_08': 3, 'SPACE_09': 4, 'SPACE_10': 5, 'SPACE_11': 6, 'SPACE_12': 7}
+    elif opt.task == 'annot' or opt.task == 'annot-reg':
+        class_to_idx = {'MODN': 0, 'MUJI': 1, 'SCAN': 2, 'WABI': 3}
+
+    import csv
+
+    try:
+        video_id_to_name = {}
+        if opt.task == 'annot' or opt.task == 'annot-reg':
+            df = pd.read_csv("/mnt/d/IDWB/Video-Emotion/BrainGuided/video_id_rt_annot.csv")
+            with open("/mnt/d/IDWB/Video-Emotion/BrainGuided/video_id_rt_annot.csv", 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                next(reader) # Skip header
+                for row in reader:
+                    video_id_to_name[int(row[0])] = row[1]
+        else:
+            df = pd.read_csv("/mnt/d/IDWB/Video-Emotion/BrainGuided/video_id_rt.csv")
+            with open("/mnt/d/IDWB/Video-Emotion/BrainGuided/video_id_rt.csv", 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                next(reader) # Skip header
+                for row in reader:
+                    video_id_to_name[int(row[0])] = row[1]
+    except FileNotFoundError:
+        print(f"Error: Input file not found: '/mnt/d/IDWB/Video-Emotion/BrainGuided/video_id_rt.csv'")
+        return
+
+    # video_order = np.array(h5py.File(f'Neural_data/video_order_rt_valid_{opt.split}.mat')['video_order'])
+    if opt.task == 'annot' or opt.task == 'annot-reg':
+        video_order = np.array(h5py.File(f'Neural_data/video_order_rt_annot_valid_{opt.split}.mat')['video_order'])
+    elif opt.task == 'space':
+        video_order = np.array(h5py.File(f'Neural_data/video_order_rt_space_valid_{opt.split}.mat')['video_order'])
+    else:
+        video_order = np.array(h5py.File(f'Neural_data/video_order_rt_valid_{opt.split}.mat')['video_order'])
+    # reshape to (1, N)
+    video_order = video_order.reshape(1, -1)
+    print(video_order.shape)
+    dataset = []
+    for i in video_order[0]:
+        if i % 100 == 0:
+            print("Dataset loading [{}/{}]".format(i, len(video_order[0])))
+        
+        video_path = os.path.join(video_root_path, video_id_to_name[i].split('/')[1])
+        raw_path = os.path.join('nRT--raw/nRT', video_id_to_name[i].split('/')[1])
+        assert os.path.exists(video_path), video_path
+
+        n_frames_file_path = os.path.join(video_path, 'n_frames')
+        n_frames = int(load_value_file(n_frames_file_path))
+        if n_frames <= 0:
+            print(video_path)
+            continue
+
+        begin_t = 1
+        end_t = n_frames
+        sample = {
+            'video': video_path,
+            'raw': raw_path,
+            'segment': [begin_t, end_t],
+            'n_frames': n_frames,
+            'video_id': video_id_to_name[i].split('/')[1],
+        }
+        if opt.task == 'design':
+            sample['label'] = class_to_idx[df.loc[i-1,'Video Name and Directory'].split('/')[0]]
+        elif opt.task == 'space':
+            sample['label'] = class_to_idx[df.loc[i-1,'Video Name and Directory'].split('/')[1][:8]]
+        elif opt.task == 'annot':
+            sample['label'] = class_to_idx[df.loc[i-1,'Video Name and Directory'].split('/')[0]]
+            annot_value = df.loc[i-1].iloc[2:].values.tolist()
+            annot_value_binary = np.where(np.array(annot_value) > 0.5, 1, 0)
+            sample['annot'] = annot_value_binary
+        elif opt.task == 'annot-reg':
+            sample['label'] = class_to_idx[df.loc[i-1,'Video Name and Directory'].split('/')[0]]
+            annot_value = df.loc[i-1].iloc[2:].values.tolist()
+            sample['annot'] = annot_value
+        
 
 
         ORIGINAL_FPS = 30
