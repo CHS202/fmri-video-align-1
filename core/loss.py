@@ -55,5 +55,9 @@ def get_loss(opt):
         return nn.CrossEntropyLoss()
     elif opt.loss_func == 'pcce_ve8':
         return PCCEVE8(lambda_0=opt.lambda_0)
+    elif opt.loss_func == 'bce':
+        return nn.BCELoss()
+    elif opt.loss_func == 'mse':
+        return nn.MSELoss()
     else:
         raise Exception

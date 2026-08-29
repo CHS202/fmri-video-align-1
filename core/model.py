@@ -3,6 +3,7 @@ import torch.nn as nn
 from models.visual_stream import VisualStream
 from models.visual_stream import CNN_3D
 from models.visual_stream import VisualStream_VAA
+from models.single_class import SingleClassWrapper
 # def generate_model(opt):
 #     model = VAANet(
 #         snippet_duration=opt.snippet_duration,
@@ -59,6 +60,12 @@ def generate_model(opt):
         )
     print('Trained network is: ',opt.network_choose)
     model = model.cuda()
+
+    # add on 20260508
+    if opt.single_annot_class == True:
+        model = SingleClassWrapper(model, class_id=opt.target_class)
+        model = model.cuda()
+
     total_params = 0
     for parameter in model.parameters():
         if not parameter.requires_grad: continue
