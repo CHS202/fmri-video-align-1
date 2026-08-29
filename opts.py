@@ -74,7 +74,7 @@ def parse_opts():
             dict(name="--task",
                  default="design",
                  type=str,
-                 help="classification tasks e.g. design, space, ..."),
+                 help="classification tasks e.g. design, space, annot, annot-reg..."),
         ],
         'core': [
             dict(name='--batch_size',
@@ -103,7 +103,7 @@ def parse_opts():
             dict(name='--loss_func',
                  default='ce',
                  type=str,
-                 help='ce | pcce_ve8'),
+                 help='ce | pcce_ve8 | bce | mse'),
             dict(name='--learning_rate',
                #   default=1e-5,
                  default=2e-4,
@@ -126,7 +126,7 @@ def parse_opts():
                  help='use predicted response'
                  ),
             dict(name='--data_use',
-                 default='sub-02',
+                 default='',
                #   default='mean',
                  help='data use'
                  ),
@@ -175,12 +175,16 @@ def parse_opts():
                  default=False,
                  help='align_only_last_layer'
                  ),
+            dict(name='--align_each_roi',
+                 default=True,
+                 help='there will be (layer_num*roi_num) gamma values when aligning each roi rdms'
+                 ),
             dict(name='--get_layer_contribution',
                  default=True,
                  help='calculate layer contribution'
                  ),
             dict(name='--contribution_method',
-                 default='ridge',
+                 default='rdm_corr',
                  type=str,
                  help='ridge | rdm_corr'
                  ),
@@ -208,6 +212,22 @@ def parse_opts():
                  default=False,
                  help='use spearman rank correlation to calculate rdm'
                  ),
+            dict(name='--single_annot_class',
+                 default=False,
+                 help='predict single annotation class at one time (task = annot-reg or annot)'
+                 ),
+            dict(name='--target_class',
+                 default=0,
+                 help='predict which annotation class(task = annot-reg or annot), number or obj, subj'
+                 ),
+            dict(name='--dapello',
+                 default=False,
+                 help='run related work Dapello et al.'
+                 ),
+            dict(name='--add_pfc',
+               default=True,
+               help='add roi PFC'
+               )
         ],
         'network': [
             {
